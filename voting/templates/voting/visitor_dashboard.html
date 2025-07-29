@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load i18n %}
+{% block extra_head %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link rel="stylesheet" href="{% static 'css/main_dashboard.css' %}">
+{% endblock %}
+
+{% block content %}
+<h1>{% trans "Welcome to the Visitor Dashboard" %}</h1>
+
+<hr>
+
+<!-- Search Bar -->
+<input type="text" id="search-dni" placeholder="{% trans 'Search by DNI' %}">
+<button id="search-button">{% trans "Search" %}</button>
+
+<!-- Voter Details Area -->
+<div id="voter-details" style="margin-top: 20px;">
+    <!-- Search results will be displayed here -->
+</div>
+
+<hr>
+
+<script>
+    $(document).ready(function () {
+        console.log("Visitor Dashboard Document is ready."); // Debugging log
+
+        // CSRF token setup for AJAX (Needed if mark_voted is used by visitors)
+        function getCSRFToken() {
+            const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+            const token = tokenElement ? tokenElement.value : null;
+            console.log("CSRF Token (Visitor):", token); // Debugging log
+            return token;
+        }
+
+        // AJAX: Search voter by DNI
+        $("#search-button").on("click", function () {
+            console.log("Search button clicked (Visitor)."); // Debugging log
+            var dni = $("#search-dni").val().trim();
+            console.log("Search DNI (Visitor):", dni); // Debugging log
+
+            if (!dni) {
+                // Display error in voter-details, consistent with main_dashboard
+                $("#voter-details").html('<p class="error-message">{% trans "Please enter a DNI to search." %}</p>');
+                return;
+            }
+
+            $.ajax({
+                url: "{% url 'voting:search_voter_by_dni' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": getCSRFToken() },
+                data: { 'dni': dni },
+                success: function (response) {
+                    $("#voter-details").empty();
+                    if (response.status === "success" && response.voter) {
+                        const voter = response.voter;
+                        const votedStatusText = voter.voted ? "{% trans 'Voted' %}" : "{% trans 'Not Voted' %}";
+                        const actionButtonText = voter.voted ? "{% trans 'Unmark' %}" : "{% trans 'Mark Voted' %}";
+                        const voterHtml = `
+                            <p><strong>{% trans "Name:" %}</strong> ${voter.name}</p>
+                            <p><strong>{% trans "DNI:" %}</strong> ${voter.dni}</p>
+                            <p><strong>{% trans "Status:" %}</strong> <span class="voted-status">${votedStatusText}</span></p>
+                            <p>
+                                <a href="#" class="mark-voted" data-voter-id="${voter.id}">
+                                    ${actionButtonText}
+                                </a>
+                            </p>
+                        `;
+                        $("#voter-details").html(voterHtml);
+                    } else {
+                        // Always show 'No voter found' for any non-success, inside voter-details
+                        $("#voter-details").html('<p class="error-message">{% trans "No voter found with that ID" %}</p>');
+                    }
+                },
+                error: function (xhr, status, error) {
+                    // Always show 'No voter found' for any AJAX error, inside voter-details
+                    $("#voter-details").html('<p class="error-message">{% trans "No voter found with that ID" %}</p>');
+                }
+            });
+        });
+
+        // AJAX: Mark voter as voted functionality
+        $("#voter-details").on("click", ".mark-voted", function (e) {
+            e.preventDefault();
+            console.log("Mark voted clicked (Visitor)."); // Debugging log
+            var voterId = $(this).data("voter-id");
+            var button = $(this);
+            var csrfToken = getCSRFToken();
+
+            if (!csrfToken) {
+                alert("{% trans 'Action requires login or CSRF token.' %}");
+                return;
+            }
+
+            $.ajax({
+                url: "{% url 'voting:mark_voted' 0 %}".replace('0', voterId),
+                type: "POST",
+                headers: { "X-CSRFToken": csrfToken },
+                success: function (response) {
+                    console.log("Mark Voted AJAX success response (Visitor):", response);
+                    if (response.status === "success") {
+                        var statusSpan = button.closest("#voter-details").find(".voted-status");
+                        const votedText = "{% trans 'Voted' %}";
+                        const notVotedText = "{% trans 'Not Voted' %}";
+                        const markVotedText = "{% trans 'Mark Voted' %}";
+                        const unmarkText = "{% trans 'Unmark' %}";
+                        
+                        if (statusSpan.text() === votedText) {
+                            statusSpan.text(notVotedText);
+                            button.text(markVotedText);
+                        } else {
+                            statusSpan.text(votedText);
+                            button.text(unmarkText);
+                        }
+                    } else {
+                        alert(response.message || "{% trans 'An error occurred while updating status.' %}");
+                    }
+                },
+                error: function (xhr, status, error) {
+                    console.error("Mark Voted AJAX error (Visitor):", status, error);
+                    alert("{% trans 'An error occurred while processing the request.' %}");
+                }
+            });
+        });
+
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+{% load static %}
+{% load i18n %}
+<!DOCTYPE html>
+<html lang="{{ LANGUAGE_CODE }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans "Election System" %}</title>
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="top-bar">
+        <div class="top-bar-inner">
+            <div class="top-bar-left">
+                <form action="{% url 'set_language' %}" method="post" class="language-form">
+                    {% csrf_token %}
+                    {% get_current_language as CURRENT_LANGUAGE %}
+                    <select name="language" onchange="this.form.submit()">
+                        <option value="en" {% if CURRENT_LANGUAGE == 'en' %}selected{% endif %}>English</option>
+                        <option value="es" {% if CURRENT_LANGUAGE == 'es' %}selected{% endif %}>Español</option>
+                    </select>
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                </form>
+            </div>
+            <div class="top-bar-right">
+                {% if user.is_authenticated %}
+                    <span class="username">{% trans "Welcome" %}, {{ user.username }}</span>
+                    <form action="{% url 'logout' %}" method="post" class="logout-form">
+                        {% csrf_token %}
+                        <button type="submit" class="logout-button">{% trans "Logout" %}</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+    <div class="content">
+        {% comment %} Display Django messages {% endcomment %}
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% block content %}
+        {% endblock %}
+    </div>
+</body>
+</html>

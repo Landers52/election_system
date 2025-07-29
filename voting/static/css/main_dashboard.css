@@ -1,0 +1,195 @@
+.voter-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 18px;
+    text-align: left;
+}
+
+.voter-table th, .voter-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+.voter-table th {
+    background-color: #f4f4f4;
+    font-weight: bold;
+}
+
+.voter-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.voter-table tr:hover {
+    background-color: #f1f1f1;
+}
+
+.progress-container {
+    margin: 20px 0;
+    padding: 15px;
+    background-color: #f5f5f5;
+    border-radius: 5px;
+}
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.progress-fill {
+    height: 100%;
+    background-color: #4CAF50;
+    width: 0;
+    transition: width 0.5s ease-in-out;
+}
+.progress-stats {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+.no-voters-message {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+}
+.custom-file-upload {
+    margin: 20px 0;
+}
+.file-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.browse-button {
+    padding: 6px 12px;
+    cursor: pointer;
+}
+.file-text {
+    color: #666;
+    margin-left: 5px; /* Add some space between button text and file name */
+}
+
+/* Styles to make the label look like a button */
+/* Styles to make the label look like a button - toned down */
+.button-like-label {
+    display: inline-block; /* Allow setting padding and width */
+    padding: 7px 14px; /* Slightly smaller padding */
+    background-color: #6c757d; /* Grey color */
+    color: white;
+    border: 1px solid #6c757d;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+    text-align: center;
+}
+
+.button-like-label:hover {
+    background-color: #5a6268; /* Darker grey on hover */
+    border-color: #545b62;
+}
+
+.button-like-label .file-text {
+    color: #ccc; /* Lighter color for the file name text inside the button */
+    font-style: italic;
+}
+
+/* Styles for the confirmation dialog */
+.confirmation-dialog {
+    position: fixed; /* Or absolute, depending on desired positioning */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    padding: 20px;
+    border: 1px solid #ccc;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    z-index: 1000; /* Ensure it's above other content */
+    text-align: center;
+}
+
+.confirmation-dialog p {
+    margin-bottom: 15px;
+}
+
+.confirmation-dialog button {
+    padding: 8px 15px;
+    margin: 0 10px;
+    cursor: pointer;
+}
+
+#confirm-replace-button {
+    background-color: #dc3545; /* Red for destructive action */
+    color: white;
+    border: 1px solid #dc3545;
+}
+
+#confirm-replace-button:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+#cancel-replace-button {
+    background-color: #6c757d; /* Grey for cancel */
+    color: white;
+    border: 1px solid #6c757d;
+}
+
+#cancel-replace-button:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+/* Style for the actual upload button - toned down */
+#upload-button {
+    padding: 7px 14px; /* Match label */
+    background-color: #6c757d; /* Grey color */
+    color: white;
+    border: 1px solid #6c757d;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+    margin-left: 10px; /* Add some space */
+}
+
+#upload-button:hover {
+    background-color: #5a6268; /* Darker grey on hover */
+    border-color: #545b62;
+}
+
+/* Styles for Search elements - emphasized */
+#search-dni {
+    padding: 9px 12px; /* Slightly larger padding */
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 5px;
+    font-size: 1em; /* Ensure consistent font size */
+}
+
+#search-button {
+    padding: 9px 18px; /* Larger padding */
+    background-color: #007bff; /* Primary blue color */
+    color: white;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+    font-size: 1em; /* Ensure consistent font size */
+}
+
+#search-button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+    border-color: #0056b3;
+}
+
+/* Style for the error message */
+.error-message {
+    color: #dc3545; /* Use a distinct error color (e.g., Bootstrap's danger color) */
+    font-weight: bold;
+    margin-top: 10px; /* Add some space above the message */
+    padding: 10px; /* Add some padding */
+    background-color: #f8d7da; /* Light red background */
+    border: 1px solid #f5c6cb; /* Red border */
+    border-radius: 4px; /* Rounded corners */
+    text-align: center; /* Center the text */
+}
