@@ -1,1 +1,1 @@
-from .development import *  # By default, use development settings
+from .development import *  # Testing production settings locally
