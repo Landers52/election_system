@@ -6,7 +6,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
 DEBUG = False
 
-ALLOWED_HOSTS = ['your-domain.com']  # Change this to your domain
+ALLOWED_HOSTS = ['*.onrender.com', 'localhost']  # Allows Render URLs and localhost
 
 # Database
 DATABASES = {
