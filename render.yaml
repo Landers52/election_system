@@ -3,8 +3,9 @@ services:
     name: election-system
     env: python
     buildCommand: |
+      apt-get update && apt-get install -y gettext
       pip install -r requirements.txt
-      python manage.py compilemessages --locale=es
+      django-admin compilemessages
       python manage.py collectstatic --noinput
     startCommand: gunicorn election_system.wsgi:application
     envVars:
@@ -16,3 +17,9 @@ services:
         value: true
       - key: LANGUAGE_CODE
         value: es
+    buildFilter:
+      paths:
+      - requirements.txt
+      - "**/*.py"
+      - "**/*.html"
+      - locale/**/*
