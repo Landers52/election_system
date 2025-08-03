@@ -8,6 +8,10 @@ DEBUG = False
 
 ALLOWED_HOSTS = ['election-system-kjf7.onrender.com', '*.onrender.com', 'localhost']  # Allows Render URLs and localhost
 
+# Force translation settings in production
+USE_I18N = True
+LANGUAGE_CODE = 'es'
+
 # Database
 DATABASES = {
     'default': {
