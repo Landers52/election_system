@@ -10,7 +10,15 @@ ALLOWED_HOSTS = ['election-system-kjf7.onrender.com', '*.onrender.com', 'localho
 
 # Force translation settings in production
 USE_I18N = True
+USE_L10N = True
 LANGUAGE_CODE = 'es'
+LANGUAGES = [
+    ('es', 'Spanish'),
+    ('en', 'English'),
+]
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+]
 
 # Database
 DATABASES = {
@@ -44,6 +52,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'voting.middleware.LanguageMiddleware',  # Our custom language middleware
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

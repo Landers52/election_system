@@ -4,7 +4,7 @@ from django.utils.deprecation import MiddlewareMixin
 
 class LanguageMiddleware(MiddlewareMixin):
     def process_request(self, request):
-        language = request.COOKIES.get('django_language')
+        language = request.session.get(translation.LANGUAGE_SESSION_KEY)
         if not language:
             language = settings.LANGUAGE_CODE
         translation.activate(language)
@@ -12,10 +12,6 @@ class LanguageMiddleware(MiddlewareMixin):
 
     def process_response(self, request, response):
         language = translation.get_language()
-        response.set_cookie(
-            settings.LANGUAGE_COOKIE_NAME,
-            language,
-            max_age=settings.LANGUAGE_COOKIE_AGE,
-            path=settings.LANGUAGE_COOKIE_PATH,
-        )
+        if hasattr(request, 'session'):
+            request.session[translation.LANGUAGE_SESSION_KEY] = language
         return response
