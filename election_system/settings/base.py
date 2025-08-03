@@ -23,6 +23,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'voting.middleware.LanguageDebugMiddleware',  # Add debug middleware
 ]
 
 ROOT_URLCONF = 'election_system.urls'
