@@ -6,7 +6,7 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
 DEBUG = False
 
-ALLOWED_HOSTS = ['*.onrender.com', 'localhost']  # Allows Render URLs and localhost
+ALLOWED_HOSTS = ['election-system-kjf7.onrender.com', '*.onrender.com', 'localhost']  # Allows Render URLs and localhost
 
 # Database
 DATABASES = {
