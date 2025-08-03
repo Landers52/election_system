@@ -4,9 +4,26 @@ import os
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 
-DEBUG = False
+DEBUG = True  # Temporarily enabled for debugging
 
 ALLOWED_HOSTS = ['election-system-kjf7.onrender.com', '*.onrender.com', 'localhost']  # Allows Render URLs and localhost
+
+# Logging configuration
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+        },
+    },
+}
 
 # Force translation settings in production
 USE_I18N = True
