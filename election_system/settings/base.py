@@ -46,14 +46,14 @@ TEMPLATES = [
 WSGI_APPLICATION = 'election_system.wsgi.application'
 
 # Internationalization
-LANGUAGE_CODE = 'en'
+LANGUAGE_CODE = 'es'  # Changed to Spanish
 USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
 LANGUAGES = [
-    ('en', 'English'),
     ('es', 'Español'),
+    ('en', 'English'),
 ]
 
 LOCALE_PATHS = [
