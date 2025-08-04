@@ -36,6 +36,7 @@ LANGUAGES = [
 LOCALE_PATHS = [
     BASE_DIR / 'locale',
 ]
+LANGUAGE_SESSION_KEY = '_language'  # Session key for language preference
 
 # Database
 DATABASES = {

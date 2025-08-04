@@ -61,6 +61,8 @@ LOCALE_PATHS = [
     BASE_DIR / 'locale',
 ]
 
+# Language settings
+LANGUAGE_SESSION_KEY = '_language'  # Session key for language preference
 LANGUAGE_COOKIE_NAME = 'django_language'
 LANGUAGE_COOKIE_AGE = None
 LANGUAGE_COOKIE_PATH = '/'
