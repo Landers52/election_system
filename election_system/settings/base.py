@@ -17,9 +17,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'voting.middleware.LanguageMiddleware',  # Our custom language middleware
-    'django.middleware.locale.LocaleMiddleware',
+    'django.middleware.locale.LocaleMiddleware',  # This should come before CommonMiddleware
     'django.middleware.common.CommonMiddleware',
+    'voting.middleware.LanguageMiddleware',  # Our custom language middleware
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',

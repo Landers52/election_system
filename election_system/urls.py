@@ -7,11 +7,11 @@ from . import views
 # Non-i18n patterns (always accessible without language prefix)
 urlpatterns = [
     path('i18n/', include('django.conf.urls.i18n')),
-    path('', views.root_redirect, name='root_redirect'),  # Root redirect without language prefix
 ]
 
 # i18n patterns (accessed with language prefix)
 urlpatterns += i18n_patterns(
+    path('', views.root_redirect, name='root_redirect'),  # Root redirect with language prefix
     path('admin/', admin.site.urls),
     path('accounts/', include('django.contrib.auth.urls')),
     path('voting/', include('voting.urls')),
