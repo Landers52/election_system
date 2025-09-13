@@ -4,7 +4,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
-from django.utils.translation import gettext_lazy as _ # Import gettext_lazy
+from django.utils.translation import gettext_lazy as _, gettext # Import gettext_lazy and gettext
 from .models import Voter, ClientProfile
 
 @login_required
@@ -212,3 +212,20 @@ def get_voter_stats(request):
         })
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
+
+def get_translations(request):
+    translations = {
+        'voted': gettext('Voted'),
+        'not_voted': gettext('Not Voted'),
+        'mark_voted': gettext('Mark Voted'),
+        'unmark': gettext('Unmark'),
+        'name': gettext('Name:'),
+        'dni': gettext('DNI:'),
+        'status': gettext('Status:'),
+        'no_voter_found': gettext('No voter found with that ID'),
+        'error_occurred': gettext('An error occurred while processing the request.'),
+        'enter_dni': gettext('Please enter a DNI to search.'),
+        'n_voted': gettext('{n} voted'),
+        'n_total_voters': gettext('{n} total voters'),
+    }
+    return JsonResponse(translations)
