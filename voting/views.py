@@ -213,7 +213,13 @@ def get_voter_stats(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
 
+from django.utils import translation
+
 def get_translations(request):
+    # Explicitly activate the language from the request context
+    lang = request.LANGUAGE_CODE
+    translation.activate(lang)
+
     translations = {
         'voted': gettext('Voted'),
         'not_voted': gettext('Not Voted'),
@@ -227,5 +233,11 @@ def get_translations(request):
         'enter_dni': gettext('Please enter a DNI to search.'),
         'n_voted': gettext('{n} voted'),
         'n_total_voters': gettext('{n} total voters'),
+        'please_select_file': gettext('Please select a file to upload.'),
+        'no_file_selected': gettext('No file selected'),
     }
+    
+    # It's good practice to deactivate it after use, though not strictly necessary here
+    translation.deactivate()
+    
     return JsonResponse(translations)

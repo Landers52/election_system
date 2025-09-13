@@ -60,156 +60,164 @@
 <hr>
 
 <script>
-let translations = {};
-
 $(document).ready(function () {
-    // Fetch translations first
+    let translations = {};
+
+    // Asynchronously fetch translations from the server
     $.ajax({
         url: "{% url 'voting:get_translations' %}",
-        async: false, // Ensure translations are loaded before other scripts run
+        method: 'GET',
         success: function(data) {
             translations = data;
+            // Once translations are loaded, initialize the rest of the page functionality
+            initializePage(translations);
         },
-        error: function() {
-            console.error("Failed to load translations.");
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error("Failed to load translations:", textStatus, errorThrown);
+            // Initialize with an empty object, which will cause fallbacks in the functions
+            initializePage({}); 
         }
     });
 
-    const uploadForm = document.getElementById('upload-form');
-    const initialVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0; 
-    const uploadButton = document.getElementById('upload-button');
-    const fileInput = document.getElementById('file');
-    const confirmationDialog = document.getElementById('confirmation-dialog');
-    const confirmReplaceButton = document.getElementById('confirm-replace-button');
-    const cancelReplaceButton = document.getElementById('cancel-replace-button');
-    const confirmReplaceInput = document.getElementById('confirm-replace');
+    function initializePage(translations) {
+        const uploadForm = document.getElementById('upload-form');
+        // Use a fallback for voter count if the attribute is missing
+        const initialVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0;
+        const fileInput = document.getElementById('file');
+        const confirmationDialog = document.getElementById('confirmation-dialog');
+        const confirmReplaceButton = document.getElementById('confirm-replace-button');
+        const cancelReplaceButton = document.getElementById('cancel-replace-button');
+        const confirmReplaceInput = document.getElementById('confirm-replace');
 
-    fileInput.addEventListener('change', function(e) {
-        const fileName = e.target.files[0]?.name;
-        const fileTextSpan = document.querySelector('.file-text');
-        if (fileName) {
-            fileTextSpan.textContent = `(${fileName})`; 
-        } else {
-            fileTextSpan.textContent = "({% trans 'No file selected' %})";
-        }
-    });
+        fileInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name;
+            const fileTextSpan = document.querySelector('.file-text');
+            if (fileName) {
+                fileTextSpan.textContent = `(${fileName})`;
+            } else {
+                // Use fallback text if translation not available
+                fileTextSpan.textContent = `(${translations.no_file_selected || 'No file selected'})`;
+            }
+        });
 
-    uploadForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        if (!fileInput.files || fileInput.files.length === 0) {
-            alert(translations.please_select_file || 'Please select a file to upload.');
-            return;
-        }
-        if (initialVoterCount > 0) {
-            confirmationDialog.style.display = 'block';
-        } else {
-            confirmReplaceInput.value = 'no';
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert(translations.please_select_file || 'Please select a file to upload.');
+                return;
+            }
+            // Show confirmation only if there are existing voters
+            if (initialVoterCount > 0) {
+                confirmationDialog.style.display = 'block';
+            } else {
+                confirmReplaceInput.value = 'no';
+                uploadForm.submit();
+            }
+        });
+
+        confirmReplaceButton.addEventListener('click', function() {
+            confirmReplaceInput.value = 'yes';
+            confirmationDialog.style.display = 'none';
             uploadForm.submit();
-        }
-    });
-
-    confirmReplaceButton.addEventListener('click', function() {
-        confirmReplaceInput.value = 'yes';
-        confirmationDialog.style.display = 'none';
-        uploadForm.submit();
-    });
-
-    cancelReplaceButton.addEventListener('click', function() {
-        confirmReplaceInput.value = 'no';
-        confirmationDialog.style.display = 'none';
-    });
-
-    function getCSRFToken() {
-        return document.querySelector('[name=csrfmiddlewaretoken]').value;
-    }
-
-    $("#search-button").on("click", function () {
-        var dni = $("#search-dni").val().trim();
-        if (!dni) {
-            alert(translations.enter_dni || 'Please enter a DNI to search.');
-            return;
-        }
-        $.ajax({
-            url: "{% url 'voting:search_voter_by_dni' %}",
-            type: "POST",
-            headers: { "X-CSRFToken": getCSRFToken() },
-            data: { 'dni': dni },
-            success: function (response) {
-                $("#voter-details").empty();
-                if (response.status === "success" && response.voter) {
-                    const voter = response.voter;
-                    const votedStatusText = voter.voted ? translations.voted : translations.not_voted;
-                    const actionButtonText = voter.voted ? translations.unmark : translations.mark_voted;
-                    const voterHtml = `
-                        <p><strong>${translations.name}</strong> ${voter.name}</p>
-                        <p><strong>${translations.dni}</strong> ${voter.dni}</p>
-                        <p><strong>${translations.status}</strong> <span class="voted-status">${votedStatusText}</span></p>
-                        <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
-                    `;
-                    $("#voter-details").html(voterHtml);
-                } else {
-                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
-                }
-            },
-            error: function () {
-                $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
-            }
         });
-    });
 
-    function updateVoterStats() {
-        $.ajax({
-            url: "{% url 'voting:get_voter_stats' %}",
-            type: "GET",
-            success: function(response) {
-                if (response.status === "success") {
-                    const stats = response.stats;
-                    if (stats.total_voters === 0) {
-                        $('.progress-stats, .progress-bar').hide();
-                        $('.no-voters-message').show();
+        cancelReplaceButton.addEventListener('click', function() {
+            confirmReplaceInput.value = 'no';
+            confirmationDialog.style.display = 'none';
+        });
+
+        function getCSRFToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+        }
+
+        $("#search-button").on("click", function () {
+            var dni = $("#search-dni").val().trim();
+            if (!dni) {
+                alert(translations.enter_dni || 'Please enter a DNI to search.');
+                return;
+            }
+            $.ajax({
+                url: "{% url 'voting:search_voter_by_dni' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": getCSRFToken() },
+                data: { 'dni': dni },
+                success: function (response) {
+                    $("#voter-details").empty();
+                    if (response.status === "success" && response.voter) {
+                        const voter = response.voter;
+                        const votedStatusText = voter.voted ? (translations.voted || 'Voted') : (translations.not_voted || 'Not Voted');
+                        const actionButtonText = voter.voted ? (translations.unmark || 'Unmark as Voted') : (translations.mark_voted || 'Mark as Voted');
+                        const voterHtml = `
+                            <p><strong>${translations.name || 'Name'}:</strong> ${voter.name}</p>
+                            <p><strong>${translations.dni || 'DNI'}:</strong> ${voter.dni}</p>
+                            <p><strong>${translations.status || 'Status'}:</strong> <span class="voted-status">${votedStatusText}</span></p>
+                            <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
+                        `;
+                        $("#voter-details").html(voterHtml);
                     } else {
-                        $('.progress-stats, .progress-bar').show();
-                        $('.no-voters-message').hide();
-                        $('.progress-fill').css('width', `${stats.percentage}%`);
-                        $('.voted-count').text(translations.n_voted.replace('{n}', stats.voted_count));
-                        $('.percentage').text(`${stats.percentage}%`);
-                        $('.total-voters').text(translations.n_total_voters.replace('{n}', stats.total_voters));
+                        $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'No voter found with that DNI.'}</p>`);
+                    }
+                },
+                error: function () {
+                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'An error occurred while searching.'}</p>`);
+                }
+            });
+        });
+
+        function updateVoterStats() {
+            $.ajax({
+                url: "{% url 'voting:get_voter_stats' %}",
+                type: "GET",
+                success: function(response) {
+                    if (response.status === "success") {
+                        const stats = response.stats;
+                        if (stats.total_voters === 0) {
+                            $('.progress-stats, .progress-bar').hide();
+                            $('.no-voters-message').show();
+                        } else {
+                            $('.progress-stats, .progress-bar').show();
+                            $('.no-voters-message').hide();
+                            $('.progress-fill').css('width', `${stats.percentage}%`);
+                            // Using replace with fallbacks
+                            $('.voted-count').text((translations.n_voted || '{n} voted').replace('{n}', stats.voted_count));
+                            $('.percentage').text(`${stats.percentage}%`);
+                            $('.total-voters').text((translations.n_total_voters || '{n} total voters').replace('{n}', stats.total_voters));
+                        }
                     }
                 }
-            }
+            });
+        }
+
+        // Initial call to update stats
+        updateVoterStats();
+
+        // Event delegation for marking a voter
+        $("#voter-details").on("click", ".mark-voted", function (e) {
+            e.preventDefault();
+            var voterId = $(this).data("voter-id");
+            var button = $(this);
+            $.ajax({
+                url: `{% url 'voting:mark_voted' 0 %}`.replace('0', voterId),
+                type: "POST",
+                headers: { "X-CSRFToken": getCSRFToken() },
+                success: function (response) {
+                    if (response.status === "success") {
+                        var statusSpan = button.closest("#voter-details").find(".voted-status");
+                        // Check current status and toggle
+                        if (statusSpan.text() === (translations.voted || 'Voted')) {
+                            statusSpan.text(translations.not_voted || 'Not Voted');
+                            button.text(translations.mark_voted || 'Mark as Voted');
+                        } else {
+                            statusSpan.text(translations.voted || 'Voted');
+                            button.text(translations.unmark || 'Unmark as Voted');
+                        }
+                        // After marking a voter, update the overall progress stats
+                        updateVoterStats();
+                    }
+                }
+            });
         });
     }
-
-    updateVoterStats();
-
-    $("#voter-details").on("click", ".mark-voted", function (e) {
-        e.preventDefault();
-        var voterId = $(this).data("voter-id");
-        var button = $(this);
-        $.ajax({
-            url: `{% url 'voting:mark_voted' 0 %}`.replace('0', voterId),
-            type: "POST",
-            headers: { "X-CSRFToken": getCSRFToken() },
-            success: function (response) {
-                if (response.status === "success") {
-                    var statusSpan = button.closest("#voter-details").find(".voted-status");
-                    if (statusSpan.text() === translations.voted) {
-                        statusSpan.text(translations.not_voted);
-                        button.text(translations.mark_voted);
-                    } else {
-                        statusSpan.text(translations.voted);
-                        button.text(translations.unmark);
-                    }
-                    updateVoterStats();
-                } else {
-                    alert(response.message || translations.error_occurred);
-                }
-            },
-            error: function () {
-                alert(translations.error_occurred);
-            }
-        });
-    });
 });
 </script>
 {% endblock %}

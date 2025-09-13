@@ -23,36 +23,37 @@
 <hr>
 
 <script>
+$(document).ready(function () {
     let translations = {};
 
-    $(document).ready(function () {
-        // Fetch translations first
-        $.ajax({
-            url: "{% url 'voting:get_translations' %}",
-            async: false, // Ensure translations are loaded before other scripts run
-            success: function(data) {
-                translations = data;
-            },
-            error: function() {
-                console.error("Failed to load translations.");
-            }
-        });
+    // Asynchronously fetch translations from the server
+    $.ajax({
+        url: "{% url 'voting:get_translations' %}",
+        method: 'GET',
+        success: function(data) {
+            translations = data;
+            // Once translations are loaded, initialize the rest of the page functionality
+            initializePage(translations);
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error("Failed to load translations:", textStatus, errorThrown);
+            // Initialize with an empty object, which will cause fallbacks in the functions
+            initializePage({}); 
+        }
+    });
 
-        console.log("Visitor Dashboard Document is ready."); // Debugging log
+    function initializePage(translations) {
+        console.log("Visitor Dashboard Initialized with translations.");
 
-        // CSRF token setup for AJAX (Needed if mark_voted is used by visitors)
         function getCSRFToken() {
             const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
             return tokenElement ? tokenElement.value : null;
         }
 
-        // AJAX: Search voter by DNI
         $("#search-button").on("click", function () {
-            console.log("Search button clicked (Visitor)."); // Debugging log
             var dni = $("#search-dni").val().trim();
-            console.log("Search DNI (Visitor):", dni); // Debugging log
-
             if (!dni) {
+                // Use fallback text if translation not available
                 $("#voter-details").html(`<p class="error-message">${translations.enter_dni || 'Please enter a DNI to search.'}</p>`);
                 return;
             }
@@ -66,35 +67,35 @@
                     $("#voter-details").empty();
                     if (response.status === "success" && response.voter) {
                         const voter = response.voter;
-                        const votedStatusText = voter.voted ? translations.voted : translations.not_voted;
-                        const actionButtonText = voter.voted ? translations.unmark : translations.mark_voted;
+                        const votedStatusText = voter.voted ? (translations.voted || 'Voted') : (translations.not_voted || 'Not Voted');
+                        // Visitor dashboard might not need action buttons, but we keep the logic for consistency
+                        const actionButtonText = voter.voted ? (translations.unmark || 'Unmark as Voted') : (translations.mark_voted || 'Mark as Voted');
                         const voterHtml = `
-                            <p><strong>${translations.name}</strong> ${voter.name}</p>
-                            <p><strong>${translations.dni}</strong> ${voter.dni}</p>
-                            <p><strong>${translations.status}</strong> <span class="voted-status">${votedStatusText}</span></p>
+                            <p><strong>${translations.name || 'Name'}:</strong> ${voter.name}</p>
+                            <p><strong>${translations.dni || 'DNI'}:</strong> ${voter.dni}</p>
+                            <p><strong>${translations.status || 'Status'}:</strong> <span class="voted-status">${votedStatusText}</span></p>
                             <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
                         `;
                         $("#voter-details").html(voterHtml);
                     } else {
-                        $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
+                        $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'No voter found with that DNI.'}</p>`);
                     }
                 },
                 error: function () {
-                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
+                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'An error occurred while searching.'}</p>`);
                 }
             });
         });
 
-        // AJAX: Mark voter as voted functionality
+        // Event delegation for marking a voter
         $("#voter-details").on("click", ".mark-voted", function (e) {
             e.preventDefault();
-            console.log("Mark voted clicked (Visitor)."); // Debugging log
             var voterId = $(this).data("voter-id");
             var button = $(this);
             var csrfToken = getCSRFToken();
 
             if (!csrfToken) {
-                alert(translations.error_occurred || 'Action requires login or CSRF token.');
+                alert(translations.error_occurred || 'Action requires login or a CSRF token.');
                 return;
             }
 
@@ -103,26 +104,26 @@
                 type: "POST",
                 headers: { "X-CSRFToken": csrfToken },
                 success: function (response) {
-                    console.log("Mark Voted AJAX success response (Visitor):", response);
                     if (response.status === "success") {
                         var statusSpan = button.closest("#voter-details").find(".voted-status");
-                        if (statusSpan.text() === translations.voted) {
-                            statusSpan.text(translations.not_voted);
-                            button.text(translations.mark_voted);
+                        // Check current status and toggle
+                        if (statusSpan.text() === (translations.voted || 'Voted')) {
+                            statusSpan.text(translations.not_voted || 'Not Voted');
+                            button.text(translations.mark_voted || 'Mark as Voted');
                         } else {
-                            statusSpan.text(translations.voted);
-                            button.text(translations.unmark);
+                            statusSpan.text(translations.voted || 'Voted');
+                            button.text(translations.unmark || 'Unmark as Voted');
                         }
                     } else {
-                        alert(response.message || translations.error_occurred);
+                        alert(response.message || (translations.error_occurred || 'An error occurred.'));
                     }
                 },
-                error: function (xhr, status, error) {
-                    console.error("Mark Voted AJAX error (Visitor):", status, error);
-                    alert(translations.error_occurred);
+                error: function () {
+                    alert(translations.error_occurred || 'An error occurred.');
                 }
             });
         });
-    });
+    }
+});
 </script>
 {% endblock %}
