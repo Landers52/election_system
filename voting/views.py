@@ -216,8 +216,10 @@ def get_voter_stats(request):
 from django.utils import translation
 
 def get_translations(request):
-    # Explicitly activate the language from the request context
-    lang = request.LANGUAGE_CODE
+    # Get language from the query parameter, default to the request's language code
+    lang = request.GET.get('lang', request.LANGUAGE_CODE)
+    
+    # Activate the determined language
     translation.activate(lang)
 
     translations = {
@@ -237,7 +239,7 @@ def get_translations(request):
         'no_file_selected': gettext('No file selected'),
     }
     
-    # It's good practice to deactivate it after use, though not strictly necessary here
+    # Deactivate to avoid side effects
     translation.deactivate()
     
     return JsonResponse(translations)
