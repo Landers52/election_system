@@ -23,15 +23,27 @@
 <hr>
 
 <script>
+    let translations = {};
+
     $(document).ready(function () {
+        // Fetch translations first
+        $.ajax({
+            url: "{% url 'voting:get_translations' %}",
+            async: false, // Ensure translations are loaded before other scripts run
+            success: function(data) {
+                translations = data;
+            },
+            error: function() {
+                console.error("Failed to load translations.");
+            }
+        });
+
         console.log("Visitor Dashboard Document is ready."); // Debugging log
 
         // CSRF token setup for AJAX (Needed if mark_voted is used by visitors)
         function getCSRFToken() {
             const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
-            const token = tokenElement ? tokenElement.value : null;
-            console.log("CSRF Token (Visitor):", token); // Debugging log
-            return token;
+            return tokenElement ? tokenElement.value : null;
         }
 
         // AJAX: Search voter by DNI
@@ -41,8 +53,7 @@
             console.log("Search DNI (Visitor):", dni); // Debugging log
 
             if (!dni) {
-                // Display error in voter-details, consistent with main_dashboard
-                $("#voter-details").html('<p class="error-message">{% trans "Please enter a DNI to search." %}</p>');
+                $("#voter-details").html(`<p class="error-message">${translations.enter_dni || 'Please enter a DNI to search.'}</p>`);
                 return;
             }
 
@@ -55,27 +66,21 @@
                     $("#voter-details").empty();
                     if (response.status === "success" && response.voter) {
                         const voter = response.voter;
-                        const votedStatusText = voter.voted ? "{% trans 'Voted' %}" : "{% trans 'Not Voted' %}";
-                        const actionButtonText = voter.voted ? "{% trans 'Unmark' %}" : "{% trans 'Mark Voted' %}";
+                        const votedStatusText = voter.voted ? translations.voted : translations.not_voted;
+                        const actionButtonText = voter.voted ? translations.unmark : translations.mark_voted;
                         const voterHtml = `
-                            <p><strong>{% trans "Name:" %}</strong> ${voter.name}</p>
-                            <p><strong>{% trans "DNI:" %}</strong> ${voter.dni}</p>
-                            <p><strong>{% trans "Status:" %}</strong> <span class="voted-status">${votedStatusText}</span></p>
-                            <p>
-                                <a href="#" class="mark-voted" data-voter-id="${voter.id}">
-                                    ${actionButtonText}
-                                </a>
-                            </p>
+                            <p><strong>${translations.name}</strong> ${voter.name}</p>
+                            <p><strong>${translations.dni}</strong> ${voter.dni}</p>
+                            <p><strong>${translations.status}</strong> <span class="voted-status">${votedStatusText}</span></p>
+                            <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
                         `;
                         $("#voter-details").html(voterHtml);
                     } else {
-                        // Always show 'No voter found' for any non-success, inside voter-details
-                        $("#voter-details").html('<p class="error-message">{% trans "No voter found with that ID" %}</p>');
+                        $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
                     }
                 },
-                error: function (xhr, status, error) {
-                    // Always show 'No voter found' for any AJAX error, inside voter-details
-                    $("#voter-details").html('<p class="error-message">{% trans "No voter found with that ID" %}</p>');
+                error: function () {
+                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
                 }
             });
         });
@@ -89,41 +94,35 @@
             var csrfToken = getCSRFToken();
 
             if (!csrfToken) {
-                alert("{% trans 'Action requires login or CSRF token.' %}");
+                alert(translations.error_occurred || 'Action requires login or CSRF token.');
                 return;
             }
 
             $.ajax({
-                url: "{% url 'voting:mark_voted' 0 %}".replace('0', voterId),
+                url: `{% url 'voting:mark_voted' 0 %}`.replace('0', voterId),
                 type: "POST",
                 headers: { "X-CSRFToken": csrfToken },
                 success: function (response) {
                     console.log("Mark Voted AJAX success response (Visitor):", response);
                     if (response.status === "success") {
                         var statusSpan = button.closest("#voter-details").find(".voted-status");
-                        const votedText = "{% trans 'Voted' %}";
-                        const notVotedText = "{% trans 'Not Voted' %}";
-                        const markVotedText = "{% trans 'Mark Voted' %}";
-                        const unmarkText = "{% trans 'Unmark' %}";
-                        
-                        if (statusSpan.text() === votedText) {
-                            statusSpan.text(notVotedText);
-                            button.text(markVotedText);
+                        if (statusSpan.text() === translations.voted) {
+                            statusSpan.text(translations.not_voted);
+                            button.text(translations.mark_voted);
                         } else {
-                            statusSpan.text(votedText);
-                            button.text(unmarkText);
+                            statusSpan.text(translations.voted);
+                            button.text(translations.unmark);
                         }
                     } else {
-                        alert(response.message || "{% trans 'An error occurred while updating status.' %}");
+                        alert(response.message || translations.error_occurred);
                     }
                 },
                 error: function (xhr, status, error) {
                     console.error("Mark Voted AJAX error (Visitor):", status, error);
-                    alert("{% trans 'An error occurred while processing the request.' %}");
+                    alert(translations.error_occurred);
                 }
             });
         });
-
     });
 </script>
 {% endblock %}

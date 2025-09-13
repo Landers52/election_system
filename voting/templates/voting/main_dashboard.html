@@ -60,78 +60,75 @@
 <hr>
 
 <script>
-const uploadForm = document.getElementById('upload-form');
-// Read voter count from the form's data attribute
-const initialVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0; 
-const uploadButton = document.getElementById('upload-button');
-const fileInput = document.getElementById('file');
-const confirmationDialog = document.getElementById('confirmation-dialog');
-const confirmReplaceButton = document.getElementById('confirm-replace-button');
-const cancelReplaceButton = document.getElementById('cancel-replace-button');
-const confirmReplaceInput = document.getElementById('confirm-replace');
-
-
-fileInput.addEventListener('change', function(e) {
-    const fileName = e.target.files[0]?.name;
-    const fileTextSpan = document.querySelector('.file-text'); // Get the span
-    if (fileName) {
-        // Update the text content of the span
-        fileTextSpan.textContent = `(${fileName})`; 
-    } else {
-        // Reset the text content of the span
-        fileTextSpan.textContent = "({% trans 'No file selected' %})";
-    }
-});
-
-uploadForm.addEventListener('submit', function(e) {
-    // Prevent default submission initially
-    e.preventDefault();
-
-    // Check if a file is selected
-    if (!fileInput.files || fileInput.files.length === 0) {
-        alert("{% trans 'Please select a file to upload.' %}");
-        return; // Stop if no file is selected
-    }
-
-    // Check if voters exist and confirmation is needed
-    if (initialVoterCount > 0) {
-        confirmationDialog.style.display = 'block'; // Show the dialog
-    } else {
-        // No existing voters, submit directly
-        confirmReplaceInput.value = 'no'; // Ensure it's 'no'
-        uploadForm.submit(); // Submit the form
-    }
-});
-
-confirmReplaceButton.addEventListener('click', function() {
-    confirmReplaceInput.value = 'yes'; // Set confirmation flag
-    confirmationDialog.style.display = 'none'; // Hide dialog
-    uploadForm.submit(); // Submit the form
-});
-
-cancelReplaceButton.addEventListener('click', function() {
-    confirmReplaceInput.value = 'no'; // Ensure flag is 'no'
-    confirmationDialog.style.display = 'none'; // Hide dialog
-    // Do not submit the form
-});
-
+let translations = {};
 
 $(document).ready(function () {
-    // CSRF token setup for AJAX (Keep existing AJAX logic)
-    function getCSRFToken() {
-        const token = document.querySelector('[name=csrfmiddlewaretoken]').value;
-        return token;
-    }
+    // Fetch translations first
+    $.ajax({
+        url: "{% url 'voting:get_translations' %}",
+        async: false, // Ensure translations are loaded before other scripts run
+        success: function(data) {
+            translations = data;
+        },
+        error: function() {
+            console.error("Failed to load translations.");
+        }
+    });
 
-    // AJAX: Search voter by DNI
-    $("#search-button").on("click", function () {
-        var dni = $("#search-dni").val().trim();
+    const uploadForm = document.getElementById('upload-form');
+    const initialVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0; 
+    const uploadButton = document.getElementById('upload-button');
+    const fileInput = document.getElementById('file');
+    const confirmationDialog = document.getElementById('confirmation-dialog');
+    const confirmReplaceButton = document.getElementById('confirm-replace-button');
+    const cancelReplaceButton = document.getElementById('cancel-replace-button');
+    const confirmReplaceInput = document.getElementById('confirm-replace');
 
-        if (!dni) {
-            alert("{% trans 'Please enter a DNI to search.' %}");
+    fileInput.addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name;
+        const fileTextSpan = document.querySelector('.file-text');
+        if (fileName) {
+            fileTextSpan.textContent = `(${fileName})`; 
+        } else {
+            fileTextSpan.textContent = "({% trans 'No file selected' %})";
+        }
+    });
+
+    uploadForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (!fileInput.files || fileInput.files.length === 0) {
+            alert(translations.please_select_file || 'Please select a file to upload.');
             return;
         }
+        if (initialVoterCount > 0) {
+            confirmationDialog.style.display = 'block';
+        } else {
+            confirmReplaceInput.value = 'no';
+            uploadForm.submit();
+        }
+    });
 
+    confirmReplaceButton.addEventListener('click', function() {
+        confirmReplaceInput.value = 'yes';
+        confirmationDialog.style.display = 'none';
+        uploadForm.submit();
+    });
+
+    cancelReplaceButton.addEventListener('click', function() {
+        confirmReplaceInput.value = 'no';
+        confirmationDialog.style.display = 'none';
+    });
+
+    function getCSRFToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    }
+
+    $("#search-button").on("click", function () {
+        var dni = $("#search-dni").val().trim();
+        if (!dni) {
+            alert(translations.enter_dni || 'Please enter a DNI to search.');
+            return;
+        }
         $.ajax({
             url: "{% url 'voting:search_voter_by_dni' %}",
             type: "POST",
@@ -141,32 +138,25 @@ $(document).ready(function () {
                 $("#voter-details").empty();
                 if (response.status === "success" && response.voter) {
                     const voter = response.voter;
-                    const votedStatusText = voter.voted ? "{% trans 'Voted' %}" : "{% trans 'Not Voted' %}";
-                    const actionButtonText = voter.voted ? "{% trans 'Unmark' %}" : "{% trans 'Mark Voted' %}";
+                    const votedStatusText = voter.voted ? translations.voted : translations.not_voted;
+                    const actionButtonText = voter.voted ? translations.unmark : translations.mark_voted;
                     const voterHtml = `
-                        <p><strong>{% trans "Name:" %}</strong> ${voter.name}</p>
-                        <p><strong>{% trans "DNI:" %}</strong> ${voter.dni}</p>
-                        <p><strong>{% trans "Status:" %}</strong> <span class="voted-status">${votedStatusText}</span></p>
-                        <p>
-                            <a href="#" class="mark-voted" data-voter-id="${voter.id}">
-                                ${actionButtonText}
-                            </a>
-                        </p>
+                        <p><strong>${translations.name}</strong> ${voter.name}</p>
+                        <p><strong>${translations.dni}</strong> ${voter.dni}</p>
+                        <p><strong>${translations.status}</strong> <span class="voted-status">${votedStatusText}</span></p>
+                        <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
                     `;
                     $("#voter-details").html(voterHtml);
                 } else {
-                    // Always show 'No voter found' for any non-success
-                    $("#voter-details").html(`<p class="error-message">{% trans "No voter found with that ID" %}</p>`);
+                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
                 }
             },
-            error: function (xhr, status, error) {
-                // Display generic error message in the details area, removed the alert
-                $("#voter-details").html(`<p class="error-message">{% trans 'No voter found with that ID' %}</p>`);
+            error: function () {
+                $("#voter-details").html(`<p class="error-message">${translations.no_voter_found}</p>`);
             }
         });
     });
 
-    // Function to update the progress bar
     function updateVoterStats() {
         $.ajax({
             url: "{% url 'voting:get_voter_stats' %}",
@@ -175,60 +165,48 @@ $(document).ready(function () {
                 if (response.status === "success") {
                     const stats = response.stats;
                     if (stats.total_voters === 0) {
-                        $('.progress-stats').hide();
-                        $('.progress-bar').hide();
+                        $('.progress-stats, .progress-bar').hide();
                         $('.no-voters-message').show();
                     } else {
-                        $('.progress-stats').show();
-                        $('.progress-bar').show();
+                        $('.progress-stats, .progress-bar').show();
                         $('.no-voters-message').hide();
-                        
                         $('.progress-fill').css('width', `${stats.percentage}%`);
-                        // Format strings with translations
-                        $('.voted-count').text("{% blocktrans %}{{ n }} voted{% endblocktrans %}".replace('{{ n }}', stats.voted_count));
+                        $('.voted-count').text(translations.n_voted.replace('{n}', stats.voted_count));
                         $('.percentage').text(`${stats.percentage}%`);
-                        $('.total-voters').text("{% blocktrans %}{{ n }} total voters{% endblocktrans %}".replace('{{ n }}', stats.total_voters));
+                        $('.total-voters').text(translations.n_total_voters.replace('{n}', stats.total_voters));
                     }
                 }
             }
         });
     }
 
-    // Update stats on page load
     updateVoterStats();
 
-    // AJAX: Mark voter as voted (delegated event handler)
     $("#voter-details").on("click", ".mark-voted", function (e) {
         e.preventDefault();
         var voterId = $(this).data("voter-id");
         var button = $(this);
-
         $.ajax({
-            url: "{% url 'voting:mark_voted' 0 %}".replace('0', voterId),
+            url: `{% url 'voting:mark_voted' 0 %}`.replace('0', voterId),
             type: "POST",
             headers: { "X-CSRFToken": getCSRFToken() },
             success: function (response) {
                 if (response.status === "success") {
                     var statusSpan = button.closest("#voter-details").find(".voted-status");
-                    const votedText = "{% trans 'Voted' %}";
-                    const notVotedText = "{% trans 'Not Voted' %}";
-                    const markVotedText = "{% trans 'Mark Voted' %}";
-                    const unmarkText = "{% trans 'Unmark' %}";
-                    
-                    if (statusSpan.text() === votedText) {
-                        statusSpan.text(notVotedText);
-                        button.text(markVotedText);
+                    if (statusSpan.text() === translations.voted) {
+                        statusSpan.text(translations.not_voted);
+                        button.text(translations.mark_voted);
                     } else {
-                        statusSpan.text(votedText);
-                        button.text(unmarkText);
+                        statusSpan.text(translations.voted);
+                        button.text(translations.unmark);
                     }
                     updateVoterStats();
                 } else {
-                    alert(response.message || "{% trans 'An error occurred while updating status.' %}");
+                    alert(response.message || translations.error_occurred);
                 }
             },
-            error: function (xhr, status, error) {
-                alert("{% trans 'An error occurred while processing the request.' %}");
+            error: function () {
+                alert(translations.error_occurred);
             }
         });
     });
