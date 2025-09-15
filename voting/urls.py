@@ -10,5 +10,4 @@ urlpatterns = [
     path('mark_voted/<int:voter_id>/', views.mark_voted, name='mark_voted'),
     path('search_voter_by_dni/', views.search_voter_by_dni, name='search_voter_by_dni'),
     path('voter_stats/', views.get_voter_stats, name='get_voter_stats'),  # New endpoint
-    path('translations/', views.get_translations, name='get_translations'),
 ]

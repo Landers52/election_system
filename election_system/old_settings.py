@@ -37,7 +37,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -110,17 +109,11 @@ USE_L10N = True
 USE_TZ = True
 
 LANGUAGES = [
-    ('en', 'English'),
     ('es', 'Español'),
 ]
 
-LOCALE_PATHS = [
-    BASE_DIR / 'locale',
-]
-
-LANGUAGE_COOKIE_NAME = 'django_language'
-LANGUAGE_COOKIE_AGE = None
-LANGUAGE_COOKIE_PATH = '/'
+USE_I18N = False
+USE_L10N = False
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/

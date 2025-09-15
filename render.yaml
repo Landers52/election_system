@@ -3,9 +3,7 @@ services:
     name: election-system
     env: python
     buildCommand: |
-      apt-get update && apt-get install -y gettext
       pip install -r requirements.txt
-      python manage.py compilemessages --ignore=env/*
       python manage.py collectstatic --noinput
     startCommand: gunicorn election_system.wsgi:application --bind=0.0.0.0:10000
     envVars:
@@ -25,4 +23,4 @@ services:
       - requirements.txt
       - "**/*.py"
       - "**/*.html"
-      - locale/**/*
+  - "**/*"

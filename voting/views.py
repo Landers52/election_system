@@ -4,24 +4,23 @@ from django.http import HttpResponseForbidden, JsonResponse
 import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib import messages
-from django.utils.translation import gettext_lazy as _, gettext # Import gettext_lazy and gettext
 from .models import Voter, ClientProfile
 
 @login_required
 def custom_redirect(request):
     if request.user.is_superuser:
-        return redirect('/admin/')  # Send superusers to Django's admin panel
+        return redirect('/admin/')
     elif hasattr(request.user, 'clientprofile'):
-        return redirect('voting:main_dashboard')  # Use namespaced URL
-    elif hasattr(request.user, 'visitor_profile'):  # Check for visitor_profile
-        return redirect('voting:visitor_dashboard')  # Use namespaced URL
+        return redirect('voting:main_dashboard')
+    elif hasattr(request.user, 'visitor_profile'):
+        return redirect('voting:visitor_dashboard')
     else:
-        return HttpResponseForbidden("Access denied. No valid profile found.")
+        return HttpResponseForbidden("Acceso denegado. No se encontró un perfil válido.")
 
 @login_required
 def main_dashboard(request):
     if not hasattr(request.user, 'clientprofile'):
-        return HttpResponseForbidden("Access denied. You must be a client to access this page.")
+        return HttpResponseForbidden("Acceso denegado. Debes ser un cliente para acceder a esta página.")
     client_profile = request.user.clientprofile
     voters = client_profile.voters.all()
     voter_count = voters.count() # Get initial voter count
@@ -31,7 +30,7 @@ def main_dashboard(request):
 
         # --- File Type Validation First ---
         if not uploaded_file.name.endswith('.xlsx'):
-            messages.error(request, _("Please upload an Excel (.xlsx) file.")) # Translate message
+            messages.error(request, "Por favor, suba un archivo de Excel (.xlsx).")
             # Redirect immediately without deleting data
             return redirect('voting:main_dashboard')
         # --- End File Type Validation ---
@@ -40,16 +39,16 @@ def main_dashboard(request):
         try:
             df = pd.read_excel(uploaded_file, engine='openpyxl')
         except pd.errors.EmptyDataError:
-            messages.error(request, _("The uploaded Excel file is empty."))
+            messages.error(request, "El archivo de Excel subido está vacío.")
             return redirect('voting:main_dashboard')
         except Exception as e: # Catch other potential read errors (e.g., corrupted file)
-            messages.error(request, _("Error reading the Excel file: {error}").format(error=str(e)))
+            messages.error(request, f"Error al leer el archivo de Excel: {str(e)}")
             return redirect('voting:main_dashboard')
 
         # Step 3: Validate Columns
         required_columns = ['dni', 'name']
-        if not all(col in df.columns for col in required_columns):
-            messages.error(request, _("Excel file must contain 'dni' and 'name' columns."))
+        if not all(col in df.columns for col in df.columns):
+            messages.error(request, "El archivo de Excel debe contener las columnas 'dni' y 'name'.")
             return redirect('voting:main_dashboard') # Redirect *before* deletion check
 
         # --- All file/column validations passed ---
@@ -59,10 +58,10 @@ def main_dashboard(request):
         if confirm_replace and voter_count > 0:
             try:
                 client_profile.voters.all().delete()
-                messages.info(request, _("Existing voters deleted."))
+                messages.info(request, "Votantes existentes eliminados.")
                 voter_count = 0 # Update local count
             except Exception as e:
-                messages.error(request, _("Error deleting existing voters: {error}").format(error=str(e)))
+                messages.error(request, f"Error al eliminar los votantes existentes: {str(e)}")
                 return redirect('voting:main_dashboard') # Stop if deletion fails
 
         # Step 6 & 7: Import Voters
@@ -72,7 +71,7 @@ def main_dashboard(request):
                 # Basic check for NaN or empty strings which might cause issues
                 if pd.isna(row.get('dni')) or str(row.get('dni')).strip() == '' or \
                    pd.isna(row.get('name')) or str(row.get('name')).strip() == '':
-                   messages.warning(request, _("Skipped row {row_num}: Missing DNI or Name.").format(row_num=index + 2)) # +2 for 1-based index + header
+                   messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.") # +2 for 1-based index + header
                    continue # Skip this row
 
                 Voter.objects.create(
@@ -83,7 +82,7 @@ def main_dashboard(request):
                 )
             # Only show success if the loop finished without critical errors
             if import_successful:
-                 messages.success(request, _("Voters imported successfully!"))
+                 messages.success(request, "¡Votantes importados con éxito!")
 
         except Exception as e: # Catch errors during Voter.objects.create
             import_successful = False # Mark as failed
@@ -91,10 +90,10 @@ def main_dashboard(request):
             # We might need more specific error handling here depending on DB backend if needed.
             if 'UNIQUE constraint' in str(e) or 'duplicate key value violates unique constraint' in str(e):
                  # Translate message
-                 messages.error(request, _("Error: Duplicate DNI found. Ensure DNIs are unique within the file and confirm replacement if necessary."))
+                 messages.error(request, "Error: DNI duplicado encontrado. Asegúrese de que los DNI sean únicos dentro del archivo y confirme el reemplazo si es necesario.")
             else:
                  # Translate message with variable
-                messages.error(request, _("Error processing the Excel file: {error}").format(error=str(e)))
+                messages.error(request, f"Error al procesar el archivo de Excel: {str(e)}")
                 
         return redirect('voting:main_dashboard')
 
@@ -119,11 +118,11 @@ def visitor_dashboard(request):
 def search_voter_by_dni(request):
     """API endpoint to search for a voter by DNI"""
     if request.method != "POST":
-        return JsonResponse({"status": "error", "message": "Only POST method is allowed"})
+        return JsonResponse({"status": "error", "message": "Solo se permite el método POST"})
     
     dni = request.POST.get('dni')
     if not dni:
-        return JsonResponse({"status": "error", "message": "DNI is required"})
+        return JsonResponse({"status": "error", "message": "El DNI es requerido"})
 
     try:
         # For clients, search in their own voters
@@ -134,7 +133,7 @@ def search_voter_by_dni(request):
             client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
             voter = get_object_or_404(Voter, client=client_profile, dni=dni)
         else:
-            return JsonResponse({"status": "error", "message": "Invalid user type"})
+            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
         return JsonResponse({
             "status": "success",
@@ -147,12 +146,12 @@ def search_voter_by_dni(request):
         })
     except Voter.DoesNotExist:
         # Return 200 OK but indicate not found in the payload with a specific message
-        return JsonResponse({"status": "not_found", "message": _("No voter found with that DNI.")})
+        return JsonResponse({"status": "not_found", "message": "No se encontró ningún votante con ese DNI."})
 
 @csrf_exempt  # Note: Consider using proper CSRF protection in production
 def mark_voted(request, voter_id):
     if request.method != "POST":
-        return JsonResponse({"status": "error", "message": "Only POST method is allowed"})
+        return JsonResponse({"status": "error", "message": "Solo se permite el método POST"})
     
     try:
         voter = Voter.objects.get(id=voter_id)
@@ -160,13 +159,13 @@ def mark_voted(request, voter_id):
         # Check permissions
         if hasattr(request.user, 'clientprofile'):
             if voter.client != request.user.clientprofile:
-                return JsonResponse({"status": "error", "message": "Access denied"})
+                return JsonResponse({"status": "error", "message": "Acceso denegado"})
         elif hasattr(request.user, 'visitor_profile'):
             client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
             if voter.client != client_profile:
-                return JsonResponse({"status": "error", "message": "Access denied"})
+                return JsonResponse({"status": "error", "message": "Acceso denegado"})
         else:
-            return JsonResponse({"status": "error", "message": "Invalid user type"})
+            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
         # Toggle the voted status
         voter.voted = not voter.voted
@@ -177,7 +176,7 @@ def mark_voted(request, voter_id):
             "voted": voter.voted
         })
     except Voter.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "Voter not found"})
+        return JsonResponse({"status": "error", "message": "Votante no encontrado"})
 
 @login_required
 def redirect_to_dashboard(request):
@@ -197,7 +196,7 @@ def get_voter_stats(request):
         elif hasattr(request.user, 'visitor_profile'):
             client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
         else:
-            return JsonResponse({"status": "error", "message": "Invalid user type"})
+            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
         total_voters = Voter.objects.filter(client=client_profile).count()
         voted_count = Voter.objects.filter(client=client_profile, voted=True).count()
@@ -213,33 +212,5 @@ def get_voter_stats(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
 
-from django.utils import translation
-
-def get_translations(request):
-    # Get language from the query parameter, default to the request's language code
-    lang = request.GET.get('lang', request.LANGUAGE_CODE)
-    
-    # Activate the determined language
-    translation.activate(lang)
-
-    translations = {
-        'voted': gettext('Voted'),
-        'not_voted': gettext('Not Voted'),
-        'mark_voted': gettext('Mark Voted'),
-        'unmark': gettext('Unmark'),
-        'name': gettext('Name:'),
-        'dni': gettext('DNI:'),
-        'status': gettext('Status:'),
-        'no_voter_found': gettext('No voter found with that ID'),
-        'error_occurred': gettext('An error occurred while processing the request.'),
-        'enter_dni': gettext('Please enter a DNI to search.'),
-        'n_voted': gettext('{n} voted'),
-        'n_total_voters': gettext('{n} total voters'),
-        'please_select_file': gettext('Please select a file to upload.'),
-        'no_file_selected': gettext('No file selected'),
-    }
-    
-    # Deactivate to avoid side effects
-    translation.deactivate()
-    
-    return JsonResponse(translations)
+# The translations endpoint has been removed. All client-side text is hardcoded to Spanish
+# and served directly from templates and views. No runtime translation activation is used.

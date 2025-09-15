@@ -1,19 +1,18 @@
 {% extends 'base.html' %}
 {% load static %}
-{% load i18n %}
 {% block extra_head %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <link rel="stylesheet" href="{% static 'css/main_dashboard.css' %}">
 {% endblock %}
 
 {% block content %}
-<h1>{% trans "Welcome to the Visitor Dashboard" %}</h1>
+<h1>Bienvenido al Panel de Visitantes</h1>
 
 <hr>
 
 <!-- Search Bar -->
-<input type="text" id="search-dni" placeholder="{% trans 'Search by DNI' %}">
-<button id="search-button">{% trans "Search" %}</button>
+<input type="text" id="search-dni" placeholder="Buscar por DNI">
+<button id="search-button">Buscar</button>
 
 <!-- Voter Details Area -->
 <div id="voter-details" style="margin-top: 20px;">
@@ -24,29 +23,21 @@
 
 <script>
 $(document).ready(function () {
-    let translations = {};
+    const TEXTS = {
+        enter_dni: 'Por favor ingrese un DNI para buscar.',
+        voted: 'Votado',
+        not_voted: 'No votado',
+        unmark: 'Desmarcar como Votado',
+        mark_voted: 'Marcar como Votado',
+        name: 'Nombre',
+        dni: 'DNI',
+        status: 'Estado',
+        no_voter_found: 'No se encontró un votante con ese DNI.',
+        error_occurred: 'Ocurrió un error al buscar.'
+    };
 
-    // Get the current language code from the URL path (e.g., /en/ or /es/)
-    const lang = window.location.pathname.split('/')[1] || 'en';
-
-    // Asynchronously fetch translations from the server, passing the language
-    $.ajax({
-        url: `{% url 'voting:get_translations' %}?lang=${lang}`,
-        method: 'GET',
-        success: function(data) {
-            translations = data;
-            // Once translations are loaded, initialize the rest of the page functionality
-            initializePage(translations);
-        },
-        error: function(jqXHR, textStatus, errorThrown) {
-            console.error("Failed to load translations:", textStatus, errorThrown);
-            // Initialize with an empty object, which will cause fallbacks in the functions
-            initializePage({}); 
-        }
-    });
-
-    function initializePage(translations) {
-        console.log("Visitor Dashboard Initialized with translations.");
+    function initializePage(texts) {
+        console.log("Visitor Dashboard Initialized.");
 
         function getCSRFToken() {
             const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -55,9 +46,9 @@ $(document).ready(function () {
 
         $("#search-button").on("click", function () {
             var dni = $("#search-dni").val().trim();
-            if (!dni) {
-                // Use fallback text if translation not available
-                $("#voter-details").html(`<p class="error-message">${translations.enter_dni || 'Please enter a DNI to search.'}</p>`);
+                if (!dni) {
+                // Use fallback text
+                $("#voter-details").html(`<p class="error-message">${texts.enter_dni}</p>`);
                 return;
             }
 
@@ -70,22 +61,22 @@ $(document).ready(function () {
                     $("#voter-details").empty();
                     if (response.status === "success" && response.voter) {
                         const voter = response.voter;
-                        const votedStatusText = voter.voted ? (translations.voted || 'Voted') : (translations.not_voted || 'Not Voted');
+                        const votedStatusText = voter.voted ? texts.voted : texts.not_voted;
                         // Visitor dashboard might not need action buttons, but we keep the logic for consistency
-                        const actionButtonText = voter.voted ? (translations.unmark || 'Unmark as Voted') : (translations.mark_voted || 'Mark as Voted');
+                        const actionButtonText = voter.voted ? texts.unmark : texts.mark_voted;
                         const voterHtml = `
-                            <p><strong>${translations.name || 'Name'}:</strong> ${voter.name}</p>
-                            <p><strong>${translations.dni || 'DNI'}:</strong> ${voter.dni}</p>
-                            <p><strong>${translations.status || 'Status'}:</strong> <span class="voted-status">${votedStatusText}</span></p>
+                            <p><strong>${texts.name}:</strong> ${voter.name}</p>
+                            <p><strong>${texts.dni}:</strong> ${voter.dni}</p>
+                            <p><strong>${texts.status}:</strong> <span class="voted-status">${votedStatusText}</span></p>
                             <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
                         `;
                         $("#voter-details").html(voterHtml);
                     } else {
-                        $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'No voter found with that DNI.'}</p>`);
+                        $("#voter-details").html(`<p class="error-message">${texts.no_voter_found}</p>`);
                     }
                 },
                 error: function () {
-                    $("#voter-details").html(`<p class="error-message">${translations.no_voter_found || 'An error occurred while searching.'}</p>`);
+                    $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
                 }
             });
         });
@@ -98,7 +89,7 @@ $(document).ready(function () {
             var csrfToken = getCSRFToken();
 
             if (!csrfToken) {
-                alert(translations.error_occurred || 'Action requires login or a CSRF token.');
+                alert(texts.error_occurred);
                 return;
             }
 
@@ -110,19 +101,19 @@ $(document).ready(function () {
                     if (response.status === "success") {
                         var statusSpan = button.closest("#voter-details").find(".voted-status");
                         // Check current status and toggle
-                        if (statusSpan.text() === (translations.voted || 'Voted')) {
-                            statusSpan.text(translations.not_voted || 'Not Voted');
-                            button.text(translations.mark_voted || 'Mark as Voted');
+                        if (statusSpan.text() === texts.voted) {
+                            statusSpan.text(texts.not_voted);
+                            button.text(texts.mark_voted);
                         } else {
-                            statusSpan.text(translations.voted || 'Voted');
-                            button.text(translations.unmark || 'Unmark as Voted');
+                            statusSpan.text(texts.voted);
+                            button.text(texts.unmark);
                         }
                     } else {
-                        alert(response.message || (translations.error_occurred || 'An error occurred.'));
+                        alert(response.message || texts.error_occurred);
                     }
                 },
                 error: function () {
-                    alert(translations.error_occurred || 'An error occurred.');
+                    alert(texts.error_occurred);
                 }
             });
         });

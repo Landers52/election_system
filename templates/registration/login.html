@@ -18,11 +18,11 @@
     }
 </style>
 <div class="login-container">
-    <h2>Login</h2>
+    <h2>Iniciar Sesión</h2>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit">Login</button>
+        <button type="submit">Iniciar Sesión</button>
     </form>
 </div>
 {% endblock %}

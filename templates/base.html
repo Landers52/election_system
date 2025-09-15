@@ -1,12 +1,9 @@
-{% load static %}
-{% load i18n %}
-{% get_current_language as LANGUAGE_CODE %}
 <!DOCTYPE html>
-<html lang="{{ LANGUAGE_CODE }}">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% trans "Election System" %}</title>
+    <title>Sistema de Elección</title>
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
@@ -14,23 +11,14 @@
     <header class="top-bar">
         <div class="top-bar-inner">
             <div class="top-bar-left">
-                <form action="{% url 'set_language' %}" method="post" class="language-form">
-                    {% csrf_token %}
-                    {% get_current_language as CURRENT_LANGUAGE %}
-                    <label for="language-selector" class="sr-only">{% trans "Select language" %}</label>
-                    <select id="language-selector" name="language" onchange="this.form.submit()" title="{% trans 'Select your language' %}">
-                        <option value="es" {% if CURRENT_LANGUAGE == 'es' %}selected{% endif %}>Español</option>
-                        <option value="en" {% if CURRENT_LANGUAGE == 'en' %}selected{% endif %}>English</option>
-                    </select>
-                    <input type="hidden" name="next" value="{{ request.path }}">
-                </form>
+                <!-- Language switcher removed -->
             </div>
             <div class="top-bar-right">
                 {% if user.is_authenticated %}
-                    <span class="username">{% trans "Welcome" %}, {{ user.username }}</span>
+                    <span class="username">Bienvenido, {{ user.username }}</span>
                     <form action="{% url 'logout' %}" method="post" class="logout-form">
                         {% csrf_token %}
-                        <button type="submit" class="logout-button">{% trans "Logout" %}</button>
+                        <button type="submit" class="logout-button">Cerrar Sesión</button>
                     </form>
                 {% endif %}
             </div>

@@ -17,7 +17,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.locale.LocaleMiddleware',  # This must be after session and before common
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -38,7 +37,6 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'django.template.context_processors.i18n',  # Add i18n context processor
             ],
         },
     },
@@ -47,25 +45,10 @@ TEMPLATES = [
 WSGI_APPLICATION = 'election_system.wsgi.application'
 
 # Internationalization
-LANGUAGE_CODE = 'es'  # Changed to Spanish
-USE_I18N = True
+LANGUAGE_CODE = 'es'
+USE_I18N = False
 USE_L10N = True
 USE_TZ = True
-
-LANGUAGES = [
-    ('es', 'Español'),
-    ('en', 'English'),
-]
-
-LOCALE_PATHS = [
-    BASE_DIR / 'locale',
-]
-
-# Language settings
-LANGUAGE_SESSION_KEY = '_language'  # Session key for language preference
-LANGUAGE_COOKIE_NAME = 'django_language'
-LANGUAGE_COOKIE_AGE = None
-LANGUAGE_COOKIE_PATH = '/'
 
 # Static files
 STATIC_URL = 'static/'

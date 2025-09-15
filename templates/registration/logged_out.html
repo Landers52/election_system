@@ -1,4 +1,6 @@
-<form method="post" action="{% url 'logout' %}">
-    {% csrf_token %}
-    <button type="submit">Log out</button>
-</form>
+{% extends "base.html" %}
+
+{% block content %}
+  <p>Has cerrado sesión.</p>
+  <a href="{% url 'login' %}">Haz clic aquí para iniciar sesión de nuevo.</a>
+{% endblock %}

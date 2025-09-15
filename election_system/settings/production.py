@@ -26,16 +26,9 @@ LOGGING = {
 }
 
 # Force translation settings in production
-USE_I18N = True
-USE_L10N = True
+USE_I18N = False
+USE_L10N = False
 LANGUAGE_CODE = 'es'
-LANGUAGES = [
-    ('es', 'Spanish'),
-    ('en', 'English'),
-]
-LOCALE_PATHS = [
-    BASE_DIR / 'locale',
-]
 LANGUAGE_SESSION_KEY = '_language'  # Session key for language preference
 
 # Database
@@ -70,7 +63,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.locale.LocaleMiddleware',  # Must be after session and before common
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
