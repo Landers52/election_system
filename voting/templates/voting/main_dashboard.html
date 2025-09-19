@@ -2,7 +2,7 @@
 {% load static %}
 {% block extra_head %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<link rel="stylesheet" href="{% static 'css/main_dashboard.css' %}">
+<link rel="stylesheet" href="{% static 'voting/css/main_dashboard.css' %}">
 {% endblock %}
 {% block content %}
 <h1>Bienvenido al Panel Principal</h1>
@@ -14,34 +14,51 @@
         <div class="progress-fill"></div>
     </div>
     <div class="progress-stats">
-    <span class="voted-count">0 votados</span>
-    <span class="percentage">0%</span>
-    <span class="total-voters">0 votantes en total</span>
+        <span class="voted-count">0 votados</span>
+        <span class="percentage">0%</span>
+        <span class="total-voters">0 votantes en total</span>
     </div>
     <div class="no-voters-message" style="display: none;">
         No se han registrado votantes aún. Por favor sube una lista de votantes para comenzar.
     </div>
+    <div id="inline-feedback" class="inline-feedback" style="display:none;"></div>
 </div>
 
-<!-- Voter Upload Form -->
-{# Pass voter count via data attribute to avoid JS linter issues with Django tags #}
-<form id="upload-form" method="post" enctype="multipart/form-data" data-voter-count="{{ voter_count|default:0 }}">
-    {% csrf_token %}
-    <input type="hidden" name="confirm_replace" id="confirm-replace" value="no"> {# Hidden field for confirmation #}
-    <div class="custom-file-upload">
-        <input type="file" name="file" id="file" class="file-input" required style="display: none;" accept=".xlsx"> {# Added accept attribute for Excel files #}
-        <label for="file" class="file-label button-like-label">
-            Elegir archivo <span class="file-text">(Ningún archivo seleccionado)</span>
-        </label>
+<!-- Actions grid: left (upload), right (delete) -->
+<div class="actions-grid">
+    <div class="col">
+        <!-- Voter Upload Form -->
+        <form id="upload-form" method="post" enctype="multipart/form-data" data-voter-count="{{ voter_count|default:0 }}">
+            {% csrf_token %}
+            <input type="hidden" name="confirm_replace" id="confirm-replace" value="no">
+            <div class="custom-file-upload">
+                <input type="file" name="file" id="file" class="file-input" required style="display:none;" accept=".xlsx">
+                <div class="file-actions-row">
+                    <label for="file" class="file-label button-like-label">
+                        Elegir archivo <span class="file-text">(Ningún archivo seleccionado)</span>
+                    </label>
+                    <button type="submit" id="upload-button" class="btn btn-primary">Subir lista</button>
+                </div>
+            </div>
+        </form>
+        <small class="hint">Formatos aceptados: .xlsx (Excel). La importación ignora filas sin DNI o Nombre.</small>
     </div>
-    <button type="submit" id="upload-button">Subir lista de votantes</button>
-</form>
+    <div class="col">
+        <div class="delete-box">
+            <button id="clear-list-button" class="btn btn-soft-danger" type="button" disabled>Borrar lista</button>
+            <small class="hint">Elimina todos los votantes cargados para tu cuenta. Esta acción no se puede deshacer.</small>
+        </div>
+    </div>
+    
+</div>
 
 <!-- Confirmation Dialog (Initially Hidden) -->
-<div id="confirmation-dialog" class="confirmation-dialog" style="display: none;">
-    <p>Los votantes ya existen en el sistema. ¿Desea reemplazarlos con la nueva lista?</p>
-    <button id="confirm-replace-button">Sí, Reemplazar</button>
-    <button id="cancel-replace-button">No, Cancelar</button>
+<div id="confirmation-dialog" class="confirmation-dialog" style="display:none;">
+    <p id="confirmation-message">Confirmar acción</p>
+    <div class="dialog-buttons">
+        <button id="confirm-action-button" class="btn btn-danger">Confirmar</button>
+        <button id="cancel-action-button" class="btn">Cancelar</button>
+    </div>
 </div>
 
 
@@ -49,7 +66,7 @@
 
 <!-- Search Bar -->
 <input type="text" id="search-dni" placeholder="Buscar por DNI">
-<button id="search-button">Buscar</button>
+<button id="search-button" class="btn btn-primary">Buscar</button>
 
 <!-- Voter Details Area -->
 <div id="voter-details" style="margin-top: 20px;">
@@ -65,8 +82,8 @@ $(document).ready(function () {
         please_select_file: 'Por favor seleccione un archivo para subir.',
         no_file_selected: 'Ningún archivo seleccionado',
         enter_dni: 'Por favor ingrese un DNI para buscar.',
-        voted: 'Votado',
-        not_voted: 'No votado',
+        voted: 'Ha votado',
+        not_voted: 'No ha votado',
         unmark: 'Desmarcar como Votado',
         mark_voted: 'Marcar como Votado',
         name: 'Nombre',
@@ -80,13 +97,17 @@ $(document).ready(function () {
 
     function initializePage(texts) {
         const uploadForm = document.getElementById('upload-form');
-        // Use a fallback for voter count if the attribute is missing
-        const initialVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0;
+        // Dynamic voter count that can be refreshed after actions
+        let currentVoterCount = parseInt(uploadForm.getAttribute('data-voter-count'), 10) || 0;
         const fileInput = document.getElementById('file');
         const confirmationDialog = document.getElementById('confirmation-dialog');
-        const confirmReplaceButton = document.getElementById('confirm-replace-button');
-        const cancelReplaceButton = document.getElementById('cancel-replace-button');
+        const confirmActionButton = document.getElementById('confirm-action-button');
+        const cancelActionButton = document.getElementById('cancel-action-button');
+        const confirmationMessage = document.getElementById('confirmation-message');
         const confirmReplaceInput = document.getElementById('confirm-replace');
+    const clearListButton = document.getElementById('clear-list-button');
+        const inlineFeedback = document.getElementById('inline-feedback');
+        let pendingAction = null; // 'replace' | 'delete'
 
         fileInput.addEventListener('change', function(e) {
             const fileName = e.target.files[0]?.name;
@@ -104,23 +125,30 @@ $(document).ready(function () {
                 alert(texts.please_select_file);
                 return;
             }
+            // Clear Django message banners on interaction
+            $(".messages").remove();
             // Show confirmation only if there are existing voters
-            if (initialVoterCount > 0) {
+            if (currentVoterCount > 0) {
+                pendingAction = 'replace';
+                confirmationMessage.textContent = 'Ya existe una lista cargada. ¿Deseas reemplazarla con la nueva?';
                 confirmationDialog.style.display = 'block';
             } else {
                 confirmReplaceInput.value = 'no';
                 uploadForm.submit();
             }
         });
-
-        confirmReplaceButton.addEventListener('click', function() {
-            confirmReplaceInput.value = 'yes';
-            confirmationDialog.style.display = 'none';
-            uploadForm.submit();
+        confirmActionButton.addEventListener('click', function() {
+            if (pendingAction === 'replace') {
+                confirmReplaceInput.value = 'yes';
+                confirmationDialog.style.display = 'none';
+                uploadForm.submit();
+            } else if (pendingAction === 'delete') {
+                confirmationDialog.style.display = 'none';
+                performDelete();
+            }
         });
-
-        cancelReplaceButton.addEventListener('click', function() {
-            confirmReplaceInput.value = 'no';
+        cancelActionButton.addEventListener('click', function() {
+            pendingAction = null;
             confirmationDialog.style.display = 'none';
         });
 
@@ -130,10 +158,9 @@ $(document).ready(function () {
 
         $("#search-button").on("click", function () {
             var dni = $("#search-dni").val().trim();
-            if (!dni) {
-                alert(texts.enter_dni);
-                return;
-            }
+            if (!dni) { return; } // No-op on empty search
+            // Clear Django message banners on interaction
+            $(".messages").remove();
             $.ajax({
                 url: "{% url 'voting:search_voter_by_dni' %}",
                 type: "POST",
@@ -145,15 +172,22 @@ $(document).ready(function () {
                         const voter = response.voter;
                         const votedStatusText = voter.voted ? texts.voted : texts.not_voted;
                         const actionButtonText = voter.voted ? texts.unmark : texts.mark_voted;
+                        const statusClass = voter.voted ? 'ok' : 'bad';
                         const voterHtml = `
-                            <p><strong>${texts.name}:</strong> ${voter.name}</p>
-                            <p><strong>${texts.dni}:</strong> ${voter.dni}</p>
-                            <p><strong>${texts.status}:</strong> <span class="voted-status">${votedStatusText}</span></p>
-                            <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
+                            <div class="voter-box ${statusClass}">
+                                <p><strong>${texts.name}:</strong> ${voter.name}</p>
+                                <p><strong>${texts.dni}:</strong> ${voter.dni}</p>
+                                <p><strong>${texts.status}:</strong> <span class="status-badge ${statusClass} voted-status">${votedStatusText}</span></p>
+                                <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
+                            </div>
                         `;
                         $("#voter-details").html(voterHtml);
-                    } else {
+                    } else if (response.status === "no_data") {
+                        $("#voter-details").html(`<p class="error-message">Sin datos, por favor cargue una lista de votantes primero</p>`);
+                    } else if (response.status === "not_found") {
                         $("#voter-details").html(`<p class="error-message">${texts.no_voter_found}</p>`);
+                    } else {
+                        $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
                     }
                 },
                 error: function () {
@@ -169,6 +203,14 @@ $(document).ready(function () {
                 success: function(response) {
                     if (response.status === "success") {
                         const stats = response.stats;
+                        // Update currentVoterCount for future decisions
+                        currentVoterCount = stats.total_voters;
+                        // Enable/disable delete button depending on if a list is loaded
+                        if (stats.total_voters > 0) {
+                            clearListButton.disabled = false;
+                        } else {
+                            clearListButton.disabled = true;
+                        }
                         if (stats.total_voters === 0) {
                             $('.progress-stats, .progress-bar').hide();
                             $('.no-voters-message').show();
@@ -192,6 +234,8 @@ $(document).ready(function () {
         // Event delegation for marking a voter
         $("#voter-details").on("click", ".mark-voted", function (e) {
             e.preventDefault();
+            // Clear Django message banners on interaction
+            $(".messages").remove();
             var voterId = $(this).data("voter-id");
             var button = $(this);
             $.ajax({
@@ -200,13 +244,18 @@ $(document).ready(function () {
                 headers: { "X-CSRFToken": getCSRFToken() },
                 success: function (response) {
                     if (response.status === "success") {
-                        var statusSpan = button.closest("#voter-details").find(".voted-status");
-                        // Check current status and toggle
-                        if (statusSpan.text() === texts.voted) {
-                            statusSpan.text(texts.not_voted);
+                        var container = button.closest('.voter-box');
+                        var statusSpan = container.find('.voted-status');
+                        var currentlyVoted = statusSpan.text() === texts.voted;
+                        if (currentlyVoted) {
+                            statusSpan.text(texts.not_voted)
+                                .removeClass('ok').addClass('bad');
+                            container.removeClass('ok').addClass('bad');
                             button.text(texts.mark_voted);
                         } else {
-                            statusSpan.text(texts.voted);
+                            statusSpan.text(texts.voted)
+                                .removeClass('bad').addClass('ok');
+                            container.removeClass('bad').addClass('ok');
                             button.text(texts.unmark);
                         }
                         // After marking a voter, update the overall progress stats
@@ -215,7 +264,58 @@ $(document).ready(function () {
                 }
             });
         });
+
+        // Clear list handler
+        clearListButton.addEventListener('click', function() {
+            $(".messages").remove();
+            pendingAction = 'delete';
+            confirmationMessage.textContent = '¿Seguro que deseas borrar toda la lista de votantes? Esta acción no se puede deshacer.';
+            confirmationDialog.style.display = 'block';
+        });
+
+        function performDelete() {
+            $.ajax({
+                url: "{% url 'voting:clear_voters' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": getCSRFToken() },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        $("#voter-details").empty();
+                        currentVoterCount = 0;
+                        showInlineFeedback('Lista borrada correctamente', 'success');
+                        updateVoterStats();
+                    } else {
+                        showInlineFeedback(response.message || 'No se pudo borrar la lista', 'error');
+                    }
+                },
+                error: function() {
+                    showInlineFeedback('Error al intentar borrar la lista', 'error');
+                }
+            });
+        }
+
+        const FEEDBACK_TIMEOUT = 7500; // extended visibility
+        function showInlineFeedback(message, type) {
+            inlineFeedback.textContent = message;
+            inlineFeedback.className = 'inline-feedback ' + (type === 'success' ? 'ok' : 'bad');
+            inlineFeedback.style.display = 'block';
+            setTimeout(() => { inlineFeedback.style.display = 'none'; }, FEEDBACK_TIMEOUT);
+        }
+
+        // Detect ?uploaded=1 param to show success feedback after redirect
+        (function handleUploadParam(){
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('uploaded') === '1') {
+                showInlineFeedback('Lista cargada correctamente', 'success');
+                params.delete('uploaded');
+                const newQs = params.toString();
+                const newUrl = window.location.pathname + (newQs ? '?' + newQs : '');
+                window.history.replaceState({}, '', newUrl);
+            }
+        })();
     }
+    // Initialize page behavior now that TEXTS is defined
+    initializePage(TEXTS);
 });
 </script>
 {% endblock %}

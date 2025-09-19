@@ -1,4 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 import pandas as pd
@@ -66,38 +67,30 @@ def main_dashboard(request):
 
         # Step 6 & 7: Import Voters
         try:
-            import_successful = True # Flag to track success
             for index, row in df.iterrows():
                 # Basic check for NaN or empty strings which might cause issues
                 if pd.isna(row.get('dni')) or str(row.get('dni')).strip() == '' or \
                    pd.isna(row.get('name')) or str(row.get('name')).strip() == '':
-                   messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.") # +2 for 1-based index + header
-                   continue # Skip this row
+                    messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.")  # +2 for 1-based index + header
+                    continue  # Skip this row
 
                 Voter.objects.create(
                     client=client_profile,
                     dni=str(row['dni']),
-                    name=str(row['name']), # Ensure name is also string
+                    name=str(row['name']),  # Ensure name is also string
                     voted=False
                 )
-            # Only show success if the loop finished without critical errors
-            if import_successful:
-                 messages.success(request, "¡Votantes importados con éxito!")
-
-        except Exception as e: # Catch errors during Voter.objects.create
-            import_successful = False # Mark as failed
-            # Check if the error is due to duplicate DNI (IntegrityError)
-            # We might need more specific error handling here depending on DB backend if needed.
+        except Exception as e:  # Catch errors during Voter.objects.create
             if 'UNIQUE constraint' in str(e) or 'duplicate key value violates unique constraint' in str(e):
-                 # Translate message
-                 messages.error(request, "Error: DNI duplicado encontrado. Asegúrese de que los DNI sean únicos dentro del archivo y confirme el reemplazo si es necesario.")
+                messages.error(request, "Error: DNI duplicado encontrado. Asegúrese de que los DNI sean únicos dentro del archivo y confirme el reemplazo si es necesario.")
             else:
-                 # Translate message with variable
                 messages.error(request, f"Error al procesar el archivo de Excel: {str(e)}")
-                
-        return redirect('voting:main_dashboard')
+            return redirect('voting:main_dashboard')  # Stay on page without success flag
 
-    # Pass voter_count to the template for the GET request
+        # Successful import -> redirect with flag for inline toast
+        return redirect(f"{reverse('voting:main_dashboard')}?uploaded=1")
+
+    # GET (or POST without file) -> render dashboard
     return render(request, 'voting/main_dashboard.html', {'voters': voters, 'voter_count': voter_count})
 
 @login_required
@@ -124,34 +117,44 @@ def search_voter_by_dni(request):
     if not dni:
         return JsonResponse({"status": "error", "message": "El DNI es requerido"})
 
-    try:
-        # For clients, search in their own voters
-        if hasattr(request.user, 'clientprofile'):
-            voter = get_object_or_404(Voter, client=request.user.clientprofile, dni=dni)
-        # For visitors, search in their associated client's voters
-        elif hasattr(request.user, 'visitor_profile'):
-            client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
-            voter = get_object_or_404(Voter, client=client_profile, dni=dni)
-        else:
-            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
+    # Determine which client's voters to search
+    if hasattr(request.user, 'clientprofile'):
+        client_profile = request.user.clientprofile
+    elif hasattr(request.user, 'visitor_profile'):
+        client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
+    else:
+        return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
+    # If there are no voters uploaded yet for this client, return a specific message
+    total_for_client = Voter.objects.filter(client=client_profile).count()
+    if total_for_client == 0:
         return JsonResponse({
-            "status": "success",
-            "voter": {
-                "id": voter.id,
-                "name": voter.name,
-                "dni": voter.dni,
-                "voted": voter.voted
-            }
+            "status": "no_data",
+            "message": "Sin datos, por favor cargue una lista de votantes primero"
         })
-    except Voter.DoesNotExist:
-        # Return 200 OK but indicate not found in the payload with a specific message
-        return JsonResponse({"status": "not_found", "message": "No se encontró ningún votante con ese DNI."})
+
+    # Try to find the voter by DNI without raising 404s
+    voter = Voter.objects.filter(client=client_profile, dni=dni).first()
+    if not voter:
+        return JsonResponse({
+            "status": "not_found",
+            "message": "No se encontró ningún votante con ese DNI."
+        })
+
+    return JsonResponse({
+        "status": "success",
+        "voter": {
+            "id": voter.id,
+            "name": voter.name,
+            "dni": voter.dni,
+            "voted": voter.voted
+        }
+    })
 
 @csrf_exempt  # Note: Consider using proper CSRF protection in production
 def mark_voted(request, voter_id):
     if request.method != "POST":
-        return JsonResponse({"status": "error", "message": "Solo se permite el método POST"})
+        return JsonResponse({"status": "error", "message": "Solo se permite el metodo POST"})
     
     try:
         voter = Voter.objects.get(id=voter_id)
@@ -214,3 +217,26 @@ def get_voter_stats(request):
 
 # The translations endpoint has been removed. All client-side text is hardcoded to Spanish
 # and served directly from templates and views. No runtime translation activation is used.
+
+@login_required
+def clear_voters(request):
+    """Delete all voters for the current client's profile. Only allowed for client users."""
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "message": "Solo se permite el método POST"})
+
+    # Only client users can clear their list
+    if not hasattr(request.user, 'clientprofile'):
+        return JsonResponse({"status": "error", "message": "Acceso denegado"})
+
+    client_profile = request.user.clientprofile
+    try:
+        qs = Voter.objects.filter(client=client_profile)
+        deleted_count = qs.count()
+        qs.delete()
+        return JsonResponse({
+            "status": "success",
+            "deleted_count": deleted_count,
+            "message": "Lista de votantes eliminada correctamente."
+        })
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
