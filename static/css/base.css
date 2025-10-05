@@ -247,6 +247,52 @@ button {
 .inline-feedback.ok { background: #d1e7dd; color: #0f5132; border-color: #badbcc; }
 .inline-feedback.bad { background: #f8d7da; color: #842029; border-color: #f5c2c7; }
 
+/* Zone progress list (distinct style) */
+.zone-progress-list { display: flex; flex-direction: column; gap: 10px; }
+.zone-item { background: #fff; border: 1px dashed #cfd4da; padding: 10px 12px; border-radius: 8px; }
+.zone-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.zone-name { font-weight: 600; color: #495057; }
+.zone-stats { color: #6c757d; font-size: .92rem; }
+.zone-bar { height: 12px; background: #f1f3f5; border-radius: 6px; overflow: hidden; }
+.zone-fill { height: 100%; width: 0; background: linear-gradient(90deg, #20c997, #0ca678); transition: width .35s ease; }
+
+/* Visitor pending list */
+.pending-list { font-size: 0.75rem; line-height: 1.25; background:#fff; border:1px solid #e2e6ea; border-radius:6px; padding:8px 10px; max-height:300px; overflow-y:auto; }
+.pending-item { padding:2px 0; border-bottom:1px dashed #e1e1e1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pending-item:last-child { border-bottom:none; }
+.pending-item:nth-child(even){ background:#fafafa; }
+.zone-filter-block select { padding:4px 6px; font-size:.85rem; }
+.zone-filter-block .zone-bar { height:12px; background:#f1f3f5; border-radius:6px; overflow:hidden; }
+.zone-filter-block .zone-fill { height:100%; background: linear-gradient(90deg,#20c997,#0ca678); }
+
+/* Overall header to mirror zone layout */
+#overall-progress .overall-header { display:flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+#overall-progress .overall-summary { font-weight: 700; color: #343a40; }
+
+/* Match zone spacing: remove extra top margin on overall progress bar */
+#overall-progress .progress-bar { margin-top: 0; }
+
+/* Tighten overall container padding to resemble zone items */
+#overall-progress { padding: 10px 12px; }
+#overall-progress .overall-header h3 { margin: 0; }
+
+/* Simple modal styles */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 999; }
+.modal-dialog {
+    position: fixed; left: 50%; top: 20%; transform: translateX(-50%);
+    background: #fff; border: 1px solid #dee2e6; border-radius: 10px; z-index: 1000;
+    min-width: 320px; max-width: 95vw; padding: 16px 16px 12px; box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+.modal-dialog h3 { margin: 0 0 8px; }
+.modal-body { display:flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.modal-body input[type="text"] { padding: 8px 10px; border: 1px solid #bfc4c8; border-radius: 6px; }
+.modal-error { color: #842029; background: #f8d7da; border: 1px solid #f5c2c7; border-radius: 6px; padding: 6px 8px; font-size: .9rem; }
+.modal-close { position: absolute; right: 10px; top: 8px; cursor: pointer; font-size: 20px; color: #6c757d; }
+
+/* Chart container sizing */
+#zone-chart-wrap { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; padding: 10px 12px; }
+#zone-chart-wrap canvas { max-height: 260px !important; width: 100% !important; }
+
 /* File actions row */
 .file-actions-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .file-label { width: auto; }
@@ -267,13 +313,18 @@ button {
 .voter-box.bad { border-color: #f5c2c7; background: #fdf6f7; }
 .status-badge {
     display: inline-block;
-    padding: 4px 10px 4px;
-    border-radius: 20px;
-    font-size: 0.78rem;
+    padding: 6px 14px 6px;
+    border-radius: 24px;
+    font-size: 0.85rem;
     font-weight: 600;
     line-height: 1.1;
     border: 1px solid transparent;
     letter-spacing: .3px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform .08s ease, box-shadow .12s ease;
 }
+.status-badge:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,.08); }
+.status-badge:active { transform: translateY(0); box-shadow: 0 0 0 rgba(0,0,0,0); }
 .status-badge.ok { background: #d1e7dd; color: #0f5132; border-color: #badbcc; }
 .status-badge.bad { background: #f8d7da; color: #842029; border-color: #f5c2c7; }

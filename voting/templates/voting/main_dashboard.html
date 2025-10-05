@@ -3,26 +3,11 @@
 {% block extra_head %}
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <link rel="stylesheet" href="{% static 'voting/css/main_dashboard.css' %}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 {% block content %}
 <h1>Bienvenido al Panel Principal</h1>
-
-<!-- Progress Bar Section -->
-<div class="progress-container">
-    <h3>Progreso de Votación</h3>
-    <div class="progress-bar">
-        <div class="progress-fill"></div>
-    </div>
-    <div class="progress-stats">
-        <span class="voted-count">0 votados</span>
-        <span class="percentage">0%</span>
-        <span class="total-voters">0 votantes en total</span>
-    </div>
-    <div class="no-voters-message" style="display: none;">
-        No se han registrado votantes aún. Por favor sube una lista de votantes para comenzar.
-    </div>
-    <div id="inline-feedback" class="inline-feedback" style="display:none;"></div>
-</div>
+<div id="inline-feedback" class="inline-feedback" style="display:none;"></div>
 
 <!-- Actions grid: left (upload), right (delete) -->
 <div class="actions-grid">
@@ -38,6 +23,7 @@
                         Elegir archivo <span class="file-text">(Ningún archivo seleccionado)</span>
                     </label>
                     <button type="submit" id="upload-button" class="btn btn-primary">Subir lista</button>
+                    <button type="button" id="upload-zone-button" class="btn btn-primary" style="background:#198754; border-color:#198754;">Subir a nueva zona</button>
                 </div>
             </div>
         </form>
@@ -61,6 +47,23 @@
     </div>
 </div>
 
+<!-- Upload to Zone Modal -->
+<div id="zone-upload-overlay" class="modal-overlay" style="display:none;"></div>
+<div id="zone-upload-dialog" class="modal-dialog" style="display:none;">
+    <h3>Subir a nueva zona</h3>
+    <div class="modal-body">
+        <label for="zone-name-input"><strong>Nombre de la zona</strong></label>
+        <input id="zone-name-input" type="text" placeholder="Ej: Barrio Centro" />
+        <div id="zone-name-error" class="modal-error" style="display:none;"></div>
+    </div>
+    <div class="dialog-buttons">
+        <button id="zone-upload-confirm" class="btn btn-primary">Subir</button>
+        <button id="zone-upload-cancel" class="btn">Cancelar</button>
+    </div>
+    <small class="hint">Se creará la zona si no existe. Evitaremos nombres duplicados.</small>
+    <div class="modal-close" id="zone-upload-close">×</div>
+    
+</div>
 
 <hr>
 
@@ -75,6 +78,31 @@
 
 <hr>
 
+<!-- Progress Section (moved below all content) -->
+<div class="progress-container" id="overall-progress">
+    <div class="overall-header">
+        <h3>Progreso de Votación (General)</h3>
+        <span class="overall-summary">0/0 (0%)</span>
+    </div>
+    <div class="progress-bar">
+        <div class="progress-fill"></div>
+    </div>
+    <div class="no-voters-message" style="display: none;">
+        No se han registrado votantes aún. Por favor sube una lista de votantes para comenzar.
+    </div>
+</div>
+
+<!-- Per-Zone Progress List -->
+<div id="zone-progress-list" class="zone-progress-list" style="margin-top:16px;"></div>
+
+<!-- Zone distribution chart -->
+<div id="zone-chart-wrap" style="margin-top:16px;">
+    <h3>Distribución por zonas</h3>
+    <canvas id="zone-distribution-chart" height="120"></canvas>
+    <div id="no-zone-chart" class="status-hint" style="display:none;">No hay datos de zonas para graficar.</div>
+    
+</div>
+
 <script>
 $(document).ready(function () {
     // Spanish-only text constants
@@ -82,8 +110,8 @@ $(document).ready(function () {
         please_select_file: 'Por favor seleccione un archivo para subir.',
         no_file_selected: 'Ningún archivo seleccionado',
         enter_dni: 'Por favor ingrese un DNI para buscar.',
-        voted: 'Ha votado',
-        not_voted: 'No ha votado',
+    voted: 'Votó',
+    not_voted: 'No votó',
         unmark: 'Desmarcar como Votado',
         mark_voted: 'Marcar como Votado',
         name: 'Nombre',
@@ -106,7 +134,19 @@ $(document).ready(function () {
         const confirmationMessage = document.getElementById('confirmation-message');
         const confirmReplaceInput = document.getElementById('confirm-replace');
     const clearListButton = document.getElementById('clear-list-button');
-        const inlineFeedback = document.getElementById('inline-feedback');
+    const inlineFeedback = document.getElementById('inline-feedback');
+    // Zone modal elements
+    const zoneOverlay = document.getElementById('zone-upload-overlay');
+    const zoneDialog = document.getElementById('zone-upload-dialog');
+    const zoneNameInput = document.getElementById('zone-name-input');
+    const zoneNameError = document.getElementById('zone-name-error');
+    const zoneConfirmBtn = document.getElementById('zone-upload-confirm');
+    const zoneCancelBtn = document.getElementById('zone-upload-cancel');
+    const zoneCloseBtn = document.getElementById('zone-upload-close');
+    // Known zones cache for duplicate prevention
+    let knownZones = new Set();
+    // Chart.js instance
+    let zoneChart = null;
         let pendingAction = null; // 'replace' | 'delete'
 
         fileInput.addEventListener('change', function(e) {
@@ -177,8 +217,8 @@ $(document).ready(function () {
                             <div class="voter-box ${statusClass}">
                                 <p><strong>${texts.name}:</strong> ${voter.name}</p>
                                 <p><strong>${texts.dni}:</strong> ${voter.dni}</p>
-                                <p><strong>${texts.status}:</strong> <span class="status-badge ${statusClass} voted-status">${votedStatusText}</span></p>
-                                <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
+                                <p><strong>Zona:</strong> ${voter.zone || 'Sin asignar'}</p>
+                                <p><strong>${texts.status}:</strong> <span class="status-badge ${statusClass} voted-status mark-voted" data-voter-id="${voter.id}" data-voted="${voter.voted}" title="Cambiar estado">${votedStatusText}</span></p>
                             </div>
                         `;
                         $("#voter-details").html(voterHtml);
@@ -212,24 +252,101 @@ $(document).ready(function () {
                             clearListButton.disabled = true;
                         }
                         if (stats.total_voters === 0) {
-                            $('.progress-stats, .progress-bar').hide();
-                            $('.no-voters-message').show();
+                            $('#overall-progress .progress-bar').hide();
+                            $('#overall-progress .overall-summary').hide();
+                            $('#overall-progress .no-voters-message').show();
                         } else {
-                            $('.progress-stats, .progress-bar').show();
-                            $('.no-voters-message').hide();
-                                $('.progress-fill').css('width', `${stats.percentage}%`);
-                                // Using replace with Spanish templates
-                                $('.voted-count').text(texts.n_voted.replace('{n}', stats.voted_count));
-                                $('.percentage').text(`${stats.percentage}%`);
-                                $('.total-voters').text(texts.n_total_voters.replace('{n}', stats.total_voters));
+                            $('#overall-progress .progress-bar').show();
+                            $('#overall-progress .overall-summary').show();
+                            $('#overall-progress .no-voters-message').hide();
+                            $('#overall-progress .progress-fill').css('width', `${stats.percentage}%`);
+                            // Unified summary like zone items: "voted/total (percent%)"
+                            $('#overall-progress .overall-summary').text(`${stats.voted_count}/${stats.total_voters} (${stats.percentage}%)`);
                         }
                     }
                 }
             });
         }
 
-        // Initial call to update stats
-        updateVoterStats();
+        function renderZoneBars(zones) {
+            const container = $('#zone-progress-list');
+            container.empty();
+            if (!zones || zones.length === 0) return;
+            zones.forEach(z => {
+                const pct = z.percentage || 0;
+                const zoneItem = $(`
+                    <div class="zone-item">
+                        <div class="zone-header"><span class="zone-name">${z.name}</span><span class="zone-stats">${z.voted_count}/${z.total_voters} (${pct}%)</span></div>
+                        <div class="zone-bar">
+                            <div class="zone-fill" style="width:${pct}%"></div>
+                        </div>
+                    </div>
+                `);
+                container.append(zoneItem);
+            });
+        }
+
+        function updateZoneStats() {
+            $.ajax({
+                url: '{% url "voting:get_zone_stats" %}',
+                type: 'GET',
+                success: function(resp){
+                    if (resp.status === 'success') {
+                        renderZoneBars(resp.zones);
+                        // populate known zones (case-insensitive)
+                        knownZones = new Set((resp.zones || []).map(z => (z.name || '').trim().toLowerCase()));
+                        renderZoneChart(resp.zones || []);
+                    }
+                }
+            });
+        }
+
+        function renderZoneChart(zones) {
+            const wrap = document.getElementById('zone-chart-wrap');
+            const empty = document.getElementById('no-zone-chart');
+            const canvas = document.getElementById('zone-distribution-chart');
+            const ctx = canvas.getContext('2d');
+            const labels = zones.map(z => z.name);
+            const data = zones.map(z => z.total_voters);
+            const hasData = data.some(v => v > 0);
+            if (!hasData) {
+                if (zoneChart) { zoneChart.destroy(); zoneChart = null; }
+                empty.style.display = 'block';
+                canvas.style.display = 'none';
+                return;
+            }
+            empty.style.display = 'none';
+            canvas.style.display = 'block';
+            const colors = [
+                '#0d6efd','#198754','#dc3545','#6f42c1','#fd7e14',
+                '#20c997','#0dcaf0','#6610f2','#ffc107','#d63384'
+            ];
+            const bgColors = labels.map((_, i) => colors[i % colors.length]);
+            const ds = {
+                labels,
+                datasets: [{
+                    data,
+                    backgroundColor: bgColors,
+                    borderWidth: 1,
+                }]
+            };
+            // Always destroy and recreate to avoid resize compounding
+            if (zoneChart) { zoneChart.destroy(); zoneChart = null; }
+            zoneChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: ds,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 1.4,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+    // Initial call to update stats
+    updateVoterStats();
+    updateZoneStats();
 
         // Event delegation for marking a voter
         $("#voter-details").on("click", ".mark-voted", function (e) {
@@ -237,29 +354,24 @@ $(document).ready(function () {
             // Clear Django message banners on interaction
             $(".messages").remove();
             var voterId = $(this).data("voter-id");
-            var button = $(this);
+            var badge = $(this);
             $.ajax({
                 url: `{% url 'voting:mark_voted' 0 %}`.replace('0', voterId),
                 type: "POST",
                 headers: { "X-CSRFToken": getCSRFToken() },
                 success: function (response) {
                     if (response.status === "success") {
-                        var container = button.closest('.voter-box');
+                        var container = badge.closest('.voter-box');
                         var statusSpan = container.find('.voted-status');
-                        var currentlyVoted = statusSpan.text() === texts.voted;
-                        if (currentlyVoted) {
-                            statusSpan.text(texts.not_voted)
-                                .removeClass('ok').addClass('bad');
-                            container.removeClass('ok').addClass('bad');
-                            button.text(texts.mark_voted);
-                        } else {
-                            statusSpan.text(texts.voted)
-                                .removeClass('bad').addClass('ok');
-                            container.removeClass('bad').addClass('ok');
-                            button.text(texts.unmark);
-                        }
-                        // After marking a voter, update the overall progress stats
+                        var newVoted = response.voted === true;
+                        statusSpan.text(newVoted ? texts.voted : texts.not_voted)
+                            .toggleClass('ok', newVoted)
+                            .toggleClass('bad', !newVoted)
+                            .attr('data-voted', newVoted);
+                        container.toggleClass('ok', newVoted).toggleClass('bad', !newVoted);
+                        // After marking a voter, update the overall progress stats and zone bars
                         updateVoterStats();
+                        updateZoneStats();
                     }
                 }
             });
@@ -284,6 +396,7 @@ $(document).ready(function () {
                         currentVoterCount = 0;
                         showInlineFeedback('Lista borrada correctamente', 'success');
                         updateVoterStats();
+                        updateZoneStats();
                     } else {
                         showInlineFeedback(response.message || 'No se pudo borrar la lista', 'error');
                     }
@@ -313,6 +426,73 @@ $(document).ready(function () {
                 window.history.replaceState({}, '', newUrl);
             }
         })();
+
+        // Upload to new zone logic
+        // Zone upload modal behavior
+        function openZoneModal() {
+            zoneNameInput.value = '';
+            zoneNameError.style.display = 'none';
+            zoneOverlay.style.display = 'block';
+            zoneDialog.style.display = 'block';
+            zoneNameInput.focus();
+        }
+        function closeZoneModal() {
+            zoneOverlay.style.display = 'none';
+            zoneDialog.style.display = 'none';
+        }
+        function validateZoneName(name) {
+            const n = (name || '').trim();
+            if (!n) { return 'Ingrese un nombre de zona.'; }
+            if (knownZones.has(n.toLowerCase())) { return 'Ya existe una zona con ese nombre.'; }
+            return '';
+        }
+        document.getElementById('upload-zone-button').addEventListener('click', function(){
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('Primero seleccione un archivo (.xlsx).');
+                return;
+            }
+            openZoneModal();
+        });
+        zoneCancelBtn.addEventListener('click', closeZoneModal);
+        zoneCloseBtn.addEventListener('click', closeZoneModal);
+        zoneOverlay.addEventListener('click', closeZoneModal);
+        zoneConfirmBtn.addEventListener('click', function(){
+            const zoneName = zoneNameInput.value;
+            const error = validateZoneName(zoneName);
+            if (error) {
+                zoneNameError.textContent = error;
+                zoneNameError.style.display = 'block';
+                return;
+            }
+            zoneNameError.style.display = 'none';
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('zone_name', zoneName.trim());
+            $.ajax({
+                url: '{% url "voting:upload_voters_to_zone" %}',
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { 'X-CSRFToken': getCSRFToken() },
+                success: function(resp){
+                    if (resp.status === 'success') {
+                        closeZoneModal();
+                        showInlineFeedback(`Zona "${resp.zone}": ${resp.created} nuevos, ${resp.updated} actualizados, ${resp.skipped} omitidos`, 'success');
+                        updateVoterStats();
+                        updateZoneStats(); // ensure new zone appears immediately
+                        // Scroll to charts/bars for quick visibility
+                        const chartEl = document.getElementById('zone-chart-wrap');
+                        if (chartEl) { chartEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                    } else {
+                        showInlineFeedback(resp.message || 'Error al subir la lista a la zona', 'error');
+                    }
+                },
+                error: function(){
+                    showInlineFeedback('Error al subir la lista a la zona', 'error');
+                }
+            });
+        });
     }
     // Initialize page behavior now that TEXTS is defined
     initializePage(TEXTS);

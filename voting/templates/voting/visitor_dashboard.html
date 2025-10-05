@@ -14,10 +14,31 @@
 <input type="text" id="search-dni" placeholder="Buscar por DNI">
 <button id="search-button" class="btn btn-primary">Buscar</button>
 
-<!-- Voter Details Area -->
-<div id="voter-details" style="margin-top: 20px;">
-    <!-- Search results will be displayed here -->
+<div class="zone-filter-block" style="margin-top:16px;">
+    <label for="zone-select"><strong>Zonas:</strong></label>
+    <select id="zone-select" style="min-width:220px;"></select>
+    <span class="zone-progress-summary" style="margin-left:12px; font-weight:600; font-size:.9rem; display:none;">0/0 (0%)</span>
+    <div class="zone-progress-bar-wrapper" style="margin-top:6px; max-width:420px; display:none;">
+        <div class="zone-bar">
+            <div class="zone-fill" style="width:0;"></div>
+        </div>
+    </div>
+    <!-- Voter Details Area moved directly below search -->
+    <div id="voter-details" style="margin-top: 12px;">
+        <!-- Search results will be displayed here -->
+    </div>
+    <div class="pending-actions" style="margin-top:20px;">
+        <div style="display:flex; gap:8px;">
+            <button id="load-pending-button" class="btn btn-primary" style="background:#6f42c1; border-color:#6f42c1;">Lista de pendientes</button>
+            <button id="refresh-button" class="btn btn-secondary" style="background:#198754; border-color:#198754; color:#fff;">Actualizar</button>
+        </div>
+        <button id="load-more-pending" class="btn" style="display:none;">Cargar más</button>
+    </div>
+    <div id="pending-meta" style="margin-top:6px; font-size:.75rem; color:#6c757d; display:none;"></div>
+    <div id="pending-list" class="pending-list" style="margin-top:8px; display:none;"></div>
 </div>
+
+<!-- (Removed duplicate voter-details block) -->
 
 <hr>
 
@@ -25,8 +46,8 @@
 $(document).ready(function () {
     const TEXTS = {
         enter_dni: 'Por favor ingrese un DNI para buscar.',
-        voted: 'Ha votado',
-        not_voted: 'No ha votado',
+    voted: 'Votó',
+    not_voted: 'No votó',
         unmark: 'Desmarcar como Votado',
         mark_voted: 'Marcar como Votado',
         name: 'Nombre',
@@ -66,8 +87,8 @@ $(document).ready(function () {
                             <div class="voter-box ${statusClass}">
                                 <p><strong>${texts.name}:</strong> ${voter.name}</p>
                                 <p><strong>${texts.dni}:</strong> ${voter.dni}</p>
-                                <p><strong>${texts.status}:</strong> <span class="status-badge ${statusClass} voted-status">${votedStatusText}</span></p>
-                                <p><a href="#" class="mark-voted" data-voter-id="${voter.id}">${actionButtonText}</a></p>
+                                <p><strong>Zona:</strong> ${voter.zone || 'Sin asignar'}</p>
+                                <p><strong>${texts.status}:</strong> <span class="status-badge ${statusClass} voted-status mark-voted" data-voter-id="${voter.id}" data-voted="${voter.voted}" title="Cambiar estado">${votedStatusText}</span></p>
                             </div>`;
                         $("#voter-details").html(voterHtml);
                     } else if (response.status === "no_data") {
@@ -103,17 +124,15 @@ $(document).ready(function () {
                     if (response.status === "success") {
                         var container = button.closest('.voter-box');
                         var statusSpan = container.find('.voted-status');
-                        var currentlyVoted = statusSpan.text() === texts.voted;
-                        if (currentlyVoted) {
-                            statusSpan.text(texts.not_voted)
-                                .removeClass('ok').addClass('bad');
-                            container.removeClass('ok').addClass('bad');
-                            button.text(texts.mark_voted);
-                        } else {
-                            statusSpan.text(texts.voted)
-                                .removeClass('bad').addClass('ok');
-                            container.removeClass('bad').addClass('ok');
-                            button.text(texts.unmark);
+                        // Use server authoritative value
+                        var newVoted = response.voted === true;
+                        statusSpan.text(newVoted ? texts.voted : texts.not_voted)
+                            .toggleClass('ok', newVoted)
+                            .toggleClass('bad', !newVoted)
+                            .attr('data-voted', newVoted);
+                        container.toggleClass('ok', newVoted).toggleClass('bad', !newVoted);
+                        if (typeof refreshAll === 'function') {
+                            refreshAll({ preservePending:true });
                         }
                     } else {
                         alert(response.message || texts.error_occurred);
@@ -124,6 +143,154 @@ $(document).ready(function () {
                 }
             });
         });
+
+        // --- Zone + pending logic ---
+        const zoneSelect = document.getElementById('zone-select');
+        const zoneSummary = document.querySelector('.zone-progress-summary');
+        const zoneBarWrapper = document.querySelector('.zone-progress-bar-wrapper');
+        const zoneFill = zoneBarWrapper.querySelector('.zone-fill');
+        const pendingButton = document.getElementById('load-pending-button');
+        const loadMoreButton = document.getElementById('load-more-pending');
+        const pendingList = document.getElementById('pending-list');
+        const pendingMeta = document.getElementById('pending-meta');
+        let zonesCache = [];
+        let pendingPage = 0;
+        let pendingHasMore = false;
+        let currentZoneId = 'all';
+        const PAGE_SIZE = 100;
+
+        function fetchZones(cb) {
+            $.get('{% url "voting:get_zone_stats" %}', function(resp){
+                if (resp.status !== 'success') { console.warn('Fallo carga zonas'); if(cb) cb(); return; }
+                zonesCache = resp.zones || [];
+                buildZoneSelect();
+                if (cb) cb();
+            }).fail(function(){ console.error('Error HTTP zonas'); if(cb) cb(); });
+        }
+        function buildZoneSelect() {
+            zoneSelect.innerHTML = '';
+            const optAll = document.createElement('option');
+            optAll.value = 'all';
+            optAll.textContent = 'Todas';
+            zoneSelect.appendChild(optAll);
+            zonesCache.forEach(z => {
+                const o = document.createElement('option');
+                o.value = z.id;
+                o.textContent = `${z.name}`;
+                zoneSelect.appendChild(o);
+            });
+            // Trigger initial update
+            updateZoneProgress();
+        }
+        function updateZoneProgress() {
+            const selected = zoneSelect.value;
+            currentZoneId = selected;
+            if (selected === 'all') {
+                // Aggregate overall from zones
+                let total = 0, voted = 0;
+                zonesCache.forEach(z => { total += z.total_voters; voted += z.voted_count; });
+                const pct = total > 0 ? (voted/total*100).toFixed(2) : 0;
+                zoneSummary.textContent = `${voted}/${total} (${pct}%)`;
+                zoneFill.style.width = `${pct}%`;
+            } else {
+                const z = zonesCache.find(z => String(z.id) === selected);
+                if (z) {
+                    zoneSummary.textContent = `${z.voted_count}/${z.total_voters} (${z.percentage}%)`;
+                    zoneFill.style.width = `${z.percentage}%`;
+                }
+            }
+            if (zonesCache.length === 0) {
+                zoneSummary.style.display = 'none';
+                zoneBarWrapper.style.display = 'none';
+            } else {
+                zoneSummary.style.display = 'inline-block';
+                zoneBarWrapper.style.display = 'block';
+            }
+            // Do not clear pending automatically here
+        }
+        function clearPending() {
+            pendingPage = 0;
+            pendingList.innerHTML = '';
+            pendingList.style.display = 'none';
+            pendingMeta.style.display = 'none';
+            loadMoreButton.style.display = 'none';
+        }
+        function refreshAll(opts={}) {
+            const { preservePending=false } = opts;
+            const showing = pendingList.style.display === 'block';
+            const previous = currentZoneId;
+            fetchZones(function(){
+                if ([...zoneSelect.options].some(o => o.value === previous)) {
+                    zoneSelect.value = previous;
+                }
+                updateZoneProgress();
+                if (preservePending && showing) {
+                    pendingList.innerHTML='';
+                    loadPending(1);
+                } else if (!preservePending) {
+                    clearPending();
+                }
+            });
+        }
+        function loadPending(nextPage) {
+            $.get('{% url "voting:pending_voters" %}', { zone_id: currentZoneId, page: nextPage, page_size: PAGE_SIZE }, function(resp){
+                if (resp.status !== 'success') return;
+                pendingPage = resp.page;
+                pendingHasMore = resp.has_more;
+                renderPending(resp.voters, resp.total);
+            });
+        }
+        function renderPending(voters, total) {
+            if (voters.length > 0) {
+                pendingList.style.display = 'block';
+            }
+            const frag = document.createDocumentFragment();
+            voters.forEach(v => {
+                const div = document.createElement('div');
+                div.className = 'pending-item';
+                div.textContent = `${v.dni} - ${v.name}`;
+                frag.appendChild(div);
+            });
+            pendingList.appendChild(frag);
+            pendingMeta.style.display = 'block';
+            const shown = pendingList.children.length;
+            const pct = total > 0 ? ((shown/total)*100).toFixed(1) : 0;
+            pendingMeta.textContent = `Mostrando ${shown} de ${total} pendientes (${pct}%)`;
+            if (pendingHasMore) {
+                loadMoreButton.style.display = 'inline-block';
+            } else {
+                loadMoreButton.style.display = 'none';
+            }
+        }
+        function clearSearchBox(){
+            $('#search-dni').val('');
+            $('#voter-details').empty();
+        }
+        zoneSelect.addEventListener('change', function(){
+            updateZoneProgress();
+            clearPending();
+            clearSearchBox();
+        });
+        pendingButton.addEventListener('click', function(){
+            clearPending();
+            clearSearchBox();
+            loadPending(1);
+        });
+        loadMoreButton.addEventListener('click', function(){
+            if (pendingHasMore) loadPending(pendingPage + 1);
+        });
+
+        // Bind refresh button
+        const refreshBtn = document.getElementById('refresh-button');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function(){
+                clearSearchBox();
+                refreshAll({ preservePending:true });
+            });
+        }
+
+        fetchZones();
+        // end zone logic
     }
     // Initialize page behavior now that TEXTS is defined
     initializePage(TEXTS);

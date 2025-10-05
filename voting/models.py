@@ -24,9 +24,22 @@ class Voter(models.Model):
     name = models.CharField(max_length=255)
     dni = models.CharField(max_length=20, unique=True)
     voted = models.BooleanField(default=False)
+    # Zone will be added via new Zone model; nullable for backward compatibility then enforced logically
+    zone = models.ForeignKey('Zone', on_delete=models.SET_NULL, null=True, blank=True, related_name='voters')
 
     def __str__(self):
         return f"{self.name} ({'Voted' if self.voted else 'Not Voted'})"
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["client", "voted"], name="voter_client_voted_idx"),
+            # Partial index for pending (not voted) lookups per zone
+            models.Index(
+                fields=["client", "zone"],
+                name="voter_client_zone_notvoted_idx",
+                condition=models.Q(voted=False),
+            ),
+        ]
 
 @receiver(post_save, sender=User)
 def create_client_profile(sender, instance, created, **kwargs):
@@ -62,3 +75,15 @@ def delete_visitor_user(sender, instance, **kwargs):
     """ Ensure the visitor user is deleted when the ClientProfile is deleted. """
     if instance.visitor_user:
         instance.visitor_user.delete()
+
+class Zone(models.Model):
+    client = models.ForeignKey(ClientProfile, on_delete=models.CASCADE, related_name='zones')
+    name = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("client", "name")
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.client.organization_name})"

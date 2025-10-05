@@ -4,8 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
+from django.db import transaction
 from django.contrib import messages
-from .models import Voter, ClientProfile
+from .models import Voter, ClientProfile, Zone
 
 @login_required
 def custom_redirect(request):
@@ -58,15 +59,19 @@ def main_dashboard(request):
         confirm_replace = request.POST.get('confirm_replace') == 'yes'
         if confirm_replace and voter_count > 0:
             try:
-                client_profile.voters.all().delete()
-                messages.info(request, "Votantes existentes eliminados.")
+                with transaction.atomic():
+                    # Delete voters then zones belonging to this client
+                    client_profile.voters.all().delete()
+                    Zone.objects.filter(client=client_profile).delete()
+                messages.info(request, "Votantes y zonas existentes eliminados.")
                 voter_count = 0 # Update local count
             except Exception as e:
-                messages.error(request, f"Error al eliminar los votantes existentes: {str(e)}")
+                messages.error(request, f"Error al eliminar los votantes/zona existentes: {str(e)}")
                 return redirect('voting:main_dashboard') # Stop if deletion fails
 
         # Step 6 & 7: Import Voters
         try:
+            default_zone, _ = Zone.objects.get_or_create(client=client_profile, name='Sin asignar')
             for index, row in df.iterrows():
                 # Basic check for NaN or empty strings which might cause issues
                 if pd.isna(row.get('dni')) or str(row.get('dni')).strip() == '' or \
@@ -78,7 +83,8 @@ def main_dashboard(request):
                     client=client_profile,
                     dni=str(row['dni']),
                     name=str(row['name']),  # Ensure name is also string
-                    voted=False
+                    voted=False,
+                    zone=default_zone
                 )
         except Exception as e:  # Catch errors during Voter.objects.create
             if 'UNIQUE constraint' in str(e) or 'duplicate key value violates unique constraint' in str(e):
@@ -147,7 +153,8 @@ def search_voter_by_dni(request):
             "id": voter.id,
             "name": voter.name,
             "dni": voter.dni,
-            "voted": voter.voted
+            "voted": voter.voted,
+            "zone": voter.zone.name if voter.zone else 'Sin asignar'
         }
     })
 
@@ -215,6 +222,34 @@ def get_voter_stats(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
 
+@login_required
+def get_zone_stats(request):
+    """API endpoint to get per-zone voter statistics for the current client/visitor."""
+    try:
+        if hasattr(request.user, 'clientprofile'):
+            client_profile = request.user.clientprofile
+        elif hasattr(request.user, 'visitor_profile'):
+            client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
+        else:
+            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
+
+        zones = Zone.objects.filter(client=client_profile).order_by('name')
+        data = []
+        for z in zones:
+            total = Voter.objects.filter(client=client_profile, zone=z).count()
+            voted = Voter.objects.filter(client=client_profile, zone=z, voted=True).count()
+            pct = round(voted / total * 100, 2) if total > 0 else 0
+            data.append({
+                'id': z.id,
+                'name': z.name,
+                'total_voters': total,
+                'voted_count': voted,
+                'percentage': pct,
+            })
+        return JsonResponse({"status": "success", "zones": data})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
+
 # The translations endpoint has been removed. All client-side text is hardcoded to Spanish
 # and served directly from templates and views. No runtime translation activation is used.
 
@@ -230,13 +265,119 @@ def clear_voters(request):
 
     client_profile = request.user.clientprofile
     try:
-        qs = Voter.objects.filter(client=client_profile)
-        deleted_count = qs.count()
-        qs.delete()
+        with transaction.atomic():
+            voter_qs = Voter.objects.filter(client=client_profile)
+            deleted_count = voter_qs.count()
+            voter_qs.delete()
+            zones_qs = Zone.objects.filter(client=client_profile)
+            zones_deleted = zones_qs.count()
+            zones_qs.delete()
         return JsonResponse({
             "status": "success",
             "deleted_count": deleted_count,
-            "message": "Lista de votantes eliminada correctamente."
+            "zones_deleted": zones_deleted,
+            "message": "Lista de votantes y zonas eliminadas correctamente."
+        })
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)})
+
+@login_required
+def upload_voters_to_zone(request):
+    """Create a zone (if needed) and import voters assigning them to that zone.
+    Upsert semantics: if DNI exists for this client, update name and zone; else create.
+    Expects POST with 'zone_name' and file in 'file'."""
+    if request.method != 'POST':
+        return JsonResponse({"status": "error", "message": "Solo se permite POST"}, status=400)
+    if not hasattr(request.user, 'clientprofile'):
+        return JsonResponse({"status": "error", "message": "Acceso denegado"}, status=403)
+    client_profile = request.user.clientprofile
+    zone_name = request.POST.get('zone_name', '').strip()
+    if not zone_name:
+        return JsonResponse({"status": "error", "message": "Nombre de zona requerido"}, status=400)
+    if 'file' not in request.FILES:
+        return JsonResponse({"status": "error", "message": "Archivo requerido"}, status=400)
+
+    uploaded_file = request.FILES['file']
+    if not uploaded_file.name.endswith('.xlsx'):
+        return JsonResponse({"status": "error", "message": "Formato inválido, use .xlsx"}, status=400)
+
+    try:
+        df = pd.read_excel(uploaded_file, engine='openpyxl')
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Error leyendo Excel: {str(e)}"})
+
+    required_columns = ['dni', 'name']
+    if not all(col in df.columns for col in required_columns):
+        return JsonResponse({"status": "error", "message": "El archivo debe tener columnas 'dni' y 'name'"}, status=400)
+
+    zone, _ = Zone.objects.get_or_create(client=client_profile, name=zone_name)
+    created = 0
+    updated = 0
+    skipped = 0
+    for index, row in df.iterrows():
+        dni_val = str(row.get('dni')).strip() if not pd.isna(row.get('dni')) else ''
+        name_val = str(row.get('name')).strip() if not pd.isna(row.get('name')) else ''
+        if not dni_val or not name_val:
+            skipped += 1
+            continue
+        voter = Voter.objects.filter(client=client_profile, dni=dni_val).first()
+        if voter:
+            # Update name + zone (don't touch voted flag)
+            changed = False
+            if voter.name != name_val:
+                voter.name = name_val
+                changed = True
+            if voter.zone_id != zone.id:
+                voter.zone = zone
+                changed = True
+            if changed:
+                voter.save(update_fields=['name', 'zone'])
+                updated += 1
+        else:
+            Voter.objects.create(client=client_profile, dni=dni_val, name=name_val, voted=False, zone=zone)
+            created += 1
+
+    return JsonResponse({
+        "status": "success",
+        "zone": zone.name,
+        "created": created,
+        "updated": updated,
+        "skipped": skipped
+    })
+
+@login_required
+def pending_voters(request):
+    """Return paginated list of not-voted voters for a given zone (or all). Params: zone_id, page, page_size."""
+    try:
+        if hasattr(request.user, 'clientprofile'):
+            client_profile = request.user.clientprofile
+        elif hasattr(request.user, 'visitor_profile'):
+            client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
+        else:
+            return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"}, status=400)
+
+        zone_id = request.GET.get('zone_id')  # may be None or 'all'
+        page = int(request.GET.get('page', '1'))
+        page_size = int(request.GET.get('page_size', '100'))
+        page = max(page, 1)
+        page_size = max(10, min(page_size, 500))  # clamp
+
+        qs = Voter.objects.filter(client=client_profile, voted=False)
+        if zone_id and zone_id != 'all':
+            qs = qs.filter(zone_id=zone_id)
+
+        total = qs.count()
+        offset = (page - 1) * page_size
+        voters = list(qs.order_by('dni').values('dni', 'name')[offset: offset + page_size])
+        has_more = offset + page_size < total
+
+        return JsonResponse({
+            'status': 'success',
+            'page': page,
+            'page_size': page_size,
+            'total': total,
+            'has_more': has_more,
+            'voters': voters,
         })
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
