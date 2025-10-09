@@ -9,7 +9,6 @@ services:
     envVars:
       - key: PORT
         value: 10000
-    envVars:
       - key: PYTHON_VERSION
         value: 3.13.0
       - key: DJANGO_SETTINGS_MODULE
@@ -18,6 +17,11 @@ services:
         value: true
       - key: LANGUAGE_CODE
         value: es
+      # Optional: set these to add your custom domain(s) without code changes
+      # - key: EXTRA_ALLOWED_HOSTS
+      #   value: tu-dominio.com,www.tu-dominio.com
+      # - key: EXTRA_CSRF_TRUSTED_ORIGINS
+      #   value: https://tu-dominio.com,https://www.tu-dominio.com
     buildFilter:
       paths:
       - requirements.txt

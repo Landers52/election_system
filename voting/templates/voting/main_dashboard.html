@@ -19,8 +19,8 @@
             <div class="custom-file-upload">
                 <input type="file" name="file" id="file" class="file-input" required style="display:none;" accept=".xlsx">
                 <div class="file-actions-row">
-                    <label for="file" class="file-label button-like-label">
-                        Elegir archivo <span class="file-text">(Ningún archivo seleccionado)</span>
+                    <label for="file" class="file-label button-like-label" style="white-space:nowrap;">
+                        Elegir archivo <span class="file-text">(ninguno seleccionado)</span>
                     </label>
                     <button type="submit" id="upload-button" class="btn btn-primary">Subir lista</button>
                     <button type="button" id="upload-zone-button" class="btn btn-primary" style="background:#198754; border-color:#198754;">Subir a nueva zona</button>
@@ -68,8 +68,10 @@
 <hr>
 
 <!-- Search Bar -->
-<input type="text" id="search-dni" placeholder="Buscar por DNI">
-<button id="search-button" class="btn btn-primary">Buscar</button>
+<div class="search-row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <input type="text" id="search-dni" placeholder="Buscar por DNI" inputmode="numeric" pattern="[0-9]*" style="max-width: 220px; width: 100%;">
+    <button id="search-button" class="btn btn-primary">Buscar</button>
+    </div>
 
 <!-- Voter Details Area -->
 <div id="voter-details" style="margin-top: 20px;">

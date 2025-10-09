@@ -11,8 +11,10 @@
 <hr>
 
 <!-- Search Bar -->
-<input type="text" id="search-dni" placeholder="Buscar por DNI">
-<button id="search-button" class="btn btn-primary">Buscar</button>
+<div class="search-row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <input type="text" id="search-dni" placeholder="Buscar por DNI" inputmode="numeric" pattern="[0-9]*" style="max-width: 220px; width: 100%;">
+    <button id="search-button" class="btn btn-primary">Buscar</button>
+    </div>
 
 <div class="zone-filter-block" style="margin-top:16px;">
     <label for="zone-select"><strong>Zonas:</strong></label>
