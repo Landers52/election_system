@@ -2,116 +2,87 @@
     width: 100%;
     border-collapse: collapse;
     margin: 20px 0;
-    font-size: 18px;
+    font-size: 16px;
     text-align: left;
 }
 
-.voter-table th, .voter-table td {
-    border: 1px solid #ddd;
-    padding: 8px;
-}
+.voter-table th, .voter-table td { border: 1px solid var(--border); padding: 8px; }
 
-.voter-table th {
-    background-color: #f4f4f4;
-    font-weight: bold;
-}
+.voter-table th { background-color: #f8fafc; color: #334155; font-weight: 600; }
 
-.voter-table tr:nth-child(even) {
-    background-color: #f9f9f9;
-}
-
-.voter-table tr:hover {
-    background-color: #f1f1f1;
-}
+.voter-table tr:nth-child(even) { background-color: #fafafa; }
+.voter-table tr:hover { background-color: #f3f4f6; }
 
 .progress-container { margin: 20px 0; }
-.no-voters-message {
-    text-align: center;
-    color: #666;
-    font-style: italic;
-}
-.custom-file-upload {
-    margin: 20px 0;
-}
-.file-label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
+.no-voters-message { text-align: center; color: var(--muted); font-style: italic; }
+.custom-file-upload { margin: 10px 0 4px; }
+.file-label { display: flex; align-items: center; gap: 10px; }
 .browse-button {
     padding: 6px 12px;
     cursor: pointer;
 }
-.file-text {
-    color: #666;
-    margin-left: 5px; /* Add some space between button text and file name */
-}
+.file-text { color: var(--muted); margin-left: 5px; }
 
 /* Button-like label specifics (keep only inner text tweak; base styles live in base.css) */
-.button-like-label .file-text { color: #ccc; font-style: italic; }
+.button-like-label .file-text { color: #475569; font-style: italic; }
 
 /* Styles for the confirmation dialog */
 .confirmation-dialog {
-    position: fixed; /* Or absolute, depending on desired positioning */
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: white;
-    padding: 20px;
-    border: 1px solid #ccc;
-    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    z-index: 1000; /* Ensure it's above other content */
+    position: fixed;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background-color: #ffffff;
+    color: var(--text);
+    padding: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px rgba(0,0,0,.08);
+    z-index: 1000;
     text-align: center;
+    border-radius: 12px;
 }
 
-.confirmation-dialog p {
-    margin-bottom: 15px;
-}
+.confirmation-dialog p { margin-bottom: 12px; }
 
-.confirmation-dialog button {
-    padding: 8px 15px;
-    margin: 0 10px;
-    cursor: pointer;
-}
+.confirmation-dialog button { padding: 8px 14px; margin: 0 8px; cursor: pointer; }
 
-#confirm-replace-button {
-    background-color: #dc3545; /* Red for destructive action */
-    color: white;
-    border: 1px solid #dc3545;
-}
-
-#confirm-replace-button:hover {
-    background-color: #c82333;
-    border-color: #bd2130;
-}
-
-#cancel-replace-button {
-    background-color: #6c757d; /* Grey for cancel */
-    color: white;
-    border: 1px solid #6c757d;
-}
-
-
-
-#cancel-replace-button:hover {
-    background-color: #5a6268;
-    border-color: #545b62;
-}
+#confirm-replace-button { background-color: #c83434; color: #fff; border: 1px solid #c83434; }
+#confirm-replace-button:hover { filter: brightness(1.05); }
+#cancel-replace-button { background-color: #f8fafc; color: var(--text); border: 1px solid var(--border); }
+#cancel-replace-button:hover { background: #eef2f7; }
 
 /* Upload button spacing */
-#upload-button { margin-left: 10px; }
+/* Upload button spacing handled by layout utilities */
 
 /* Search input spacing */
-#search-dni { margin-right: 5px; }
+/* Search input spacing handled by layout utilities */
 
 /* Style for the error message */
 .error-message {
-    color: #dc3545; /* Use a distinct error color (e.g., Bootstrap's danger color) */
-    font-weight: bold;
-    margin-top: 10px; /* Add some space above the message */
-    padding: 10px; /* Add some padding */
-    background-color: #f8d7da; /* Light red background */
-    border: 1px solid #f5c6cb; /* Red border */
-    border-radius: 4px; /* Rounded corners */
-    text-align: center; /* Center the text */
+    color: #7f1d1d;
+    font-weight: 700;
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #fdecec;
+    border: 1px solid #f5b5b5;
+    border-radius: 8px;
+    text-align: center;
+}
+
+/* Success message box (mirrors error message but in green) */
+.success-message {
+    color: #14532d;
+    font-weight: 700;
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #e8f7f0;
+    border: 1px solid #b7e4cf;
+    border-radius: 8px;
+    text-align: center;
+}
+
+/* Prominent organization name on main dashboard */
+.org-name {
+    font-size: 1.75rem; /* larger for legibility */
+    font-weight: 800;
+    letter-spacing: .3px;
+    line-height: 1.2;
 }

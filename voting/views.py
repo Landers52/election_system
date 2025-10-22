@@ -4,7 +4,9 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
 import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.db import transaction
+from django.db.models import F, Count, Q
 from django.contrib import messages
 from .models import Voter, ClientProfile, Zone
 
@@ -49,7 +51,7 @@ def main_dashboard(request):
 
         # Step 3: Validate Columns
         required_columns = ['dni', 'name']
-        if not all(col in df.columns for col in df.columns):
+        if not all(col in df.columns for col in required_columns):
             messages.error(request, "El archivo de Excel debe contener las columnas 'dni' y 'name'.")
             return redirect('voting:main_dashboard') # Redirect *before* deletion check
 
@@ -72,32 +74,53 @@ def main_dashboard(request):
         # Step 6 & 7: Import Voters
         try:
             default_zone, _ = Zone.objects.get_or_create(client=client_profile, name='Sin asignar')
+            created = 0
+            updated = 0
             for index, row in df.iterrows():
-                # Basic check for NaN or empty strings which might cause issues
-                if pd.isna(row.get('dni')) or str(row.get('dni')).strip() == '' or \
-                   pd.isna(row.get('name')) or str(row.get('name')).strip() == '':
-                    messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.")  # +2 for 1-based index + header
-                    continue  # Skip this row
+                # Normalize and validate values
+                dni_val = '' if pd.isna(row.get('dni')) else str(row.get('dni')).strip()
+                name_val = '' if pd.isna(row.get('name')) else str(row.get('name')).strip()
+                if not dni_val or not name_val:
+                    messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.")
+                    continue
 
-                Voter.objects.create(
-                    client=client_profile,
-                    dni=str(row['dni']),
-                    name=str(row['name']),  # Ensure name is also string
-                    voted=False,
-                    zone=default_zone
-                )
-        except Exception as e:  # Catch errors during Voter.objects.create
-            if 'UNIQUE constraint' in str(e) or 'duplicate key value violates unique constraint' in str(e):
-                messages.error(request, "Error: DNI duplicado encontrado. Asegúrese de que los DNI sean únicos dentro del archivo y confirme el reemplazo si es necesario.")
-            else:
-                messages.error(request, f"Error al procesar el archivo de Excel: {str(e)}")
+                # Upsert by (client, dni)
+                voter = Voter.objects.filter(client=client_profile, dni=dni_val).first()
+                if voter:
+                    changed = False
+                    if voter.name != name_val:
+                        voter.name = name_val
+                        changed = True
+                    if voter.zone_id != default_zone.id:
+                        voter.zone = default_zone
+                        changed = True
+                    if changed:
+                        voter.save(update_fields=['name', 'zone'])
+                        updated += 1
+                else:
+                    Voter.objects.create(
+                        client=client_profile,
+                        dni=dni_val,
+                        name=name_val,
+                        voted=False,
+                        zone=default_zone
+                    )
+                    created += 1
+            # After bulk operations, recompute denormalized counters for this client
+            recompute_client_counters(client_profile)
+        except Exception as e:  # Catch errors during upsert
+            messages.error(request, f"Error al procesar el archivo de Excel: {str(e)}")
             return redirect('voting:main_dashboard')  # Stay on page without success flag
 
         # Successful import -> redirect with flag for inline toast
         return redirect(f"{reverse('voting:main_dashboard')}?uploaded=1")
 
     # GET (or POST without file) -> render dashboard
-    return render(request, 'voting/main_dashboard.html', {'voters': voters, 'voter_count': voter_count})
+    return render(request, 'voting/main_dashboard.html', {
+        'voters': voters,
+        'voter_count': voter_count,
+        'party_name': client_profile.organization_name,
+    })
 
 @login_required
 def visitor_dashboard(request):
@@ -178,8 +201,19 @@ def mark_voted(request, voter_id):
             return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
         # Toggle the voted status
+        prev = voter.voted
         voter.voted = not voter.voted
-        voter.save()
+        voter.save(update_fields=['voted'])
+        # Update denormalized counters
+        delta = 1 if voter.voted and not prev else (-1 if (prev and not voter.voted) else 0)
+        if delta != 0:
+            try:
+                if voter.zone_id:
+                    Zone.objects.filter(id=voter.zone_id).update(voted_count=F('voted_count') + delta)
+                ClientProfile.objects.filter(id=voter.client_id).update(voted_count=F('voted_count') + delta)
+            except Exception:
+                # Fallback: ensure consistency later
+                pass
         
         return JsonResponse({
             "status": "success",
@@ -187,6 +221,41 @@ def mark_voted(request, voter_id):
         })
     except Voter.DoesNotExist:
         return JsonResponse({"status": "error", "message": "Votante no encontrado"})
+
+
+@login_required
+@require_POST
+def mark_voted_by_dni_set(request):
+    """Fast path: set voted=True by DNI for the current client/visitor without fetching details."""
+    dni = (request.POST.get('dni') or '').strip()
+    if not dni:
+        return JsonResponse({"status": "error", "message": "DNI requerido"}, status=400)
+
+    # Resolve client profile for either client or visitor user
+    if hasattr(request.user, 'clientprofile'):
+        client_profile = request.user.clientprofile
+    elif hasattr(request.user, 'visitor_profile'):
+        client_profile = get_object_or_404(ClientProfile, visitor_user=request.user)
+    else:
+        return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"}, status=403)
+
+    voter = Voter.objects.filter(client=client_profile, dni=dni).first()
+    if not voter:
+        # Return 200 with not_found status to avoid console 404s on the client
+        return JsonResponse({"status": "not_found", "message": "No se encontró ningún votante con ese DNI."})
+
+    if not voter.voted:
+        voter.voted = True
+        voter.save(update_fields=['voted'])
+        # Update denormalized counters (+1)
+        try:
+            if voter.zone_id:
+                Zone.objects.filter(id=voter.zone_id).update(voted_count=F('voted_count') + 1)
+            ClientProfile.objects.filter(id=voter.client_id).update(voted_count=F('voted_count') + 1)
+        except Exception:
+            pass
+
+    return JsonResponse({"status": "success", "voted": True})
 
 @login_required
 def redirect_to_dashboard(request):
@@ -208,9 +277,18 @@ def get_voter_stats(request):
         else:
             return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
-        total_voters = Voter.objects.filter(client=client_profile).count()
-        voted_count = Voter.objects.filter(client=client_profile, voted=True).count()
-        
+        # Use denormalized counters
+        total_voters = client_profile.total_voters
+        voted_count = client_profile.voted_count
+        # Auto-heal: if counters are zero but there are voters, recompute once
+        if total_voters == 0:
+            real_total = Voter.objects.filter(client=client_profile).count()
+            if real_total > 0:
+                recompute_client_counters(client_profile)
+                client_profile.refresh_from_db(fields=["total_voters", "voted_count"])
+                total_voters = client_profile.total_voters
+                voted_count = client_profile.voted_count
+
         return JsonResponse({
             "status": "success",
             "stats": {
@@ -234,10 +312,16 @@ def get_zone_stats(request):
             return JsonResponse({"status": "error", "message": "Tipo de usuario inválido"})
 
         zones = Zone.objects.filter(client=client_profile).order_by('name')
+        # Auto-heal: if all zone totals are zero but there are voters, recompute once
+        if zones.exists():
+            if not zones.filter(total_voters__gt=0).exists():
+                if Voter.objects.filter(client=client_profile).exists():
+                    recompute_client_counters(client_profile)
+                    zones = Zone.objects.filter(client=client_profile).order_by('name')
         data = []
         for z in zones:
-            total = Voter.objects.filter(client=client_profile, zone=z).count()
-            voted = Voter.objects.filter(client=client_profile, zone=z, voted=True).count()
+            total = z.total_voters
+            voted = z.voted_count
             pct = round(voted / total * 100, 2) if total > 0 else 0
             data.append({
                 'id': z.id,
@@ -272,6 +356,8 @@ def clear_voters(request):
             zones_qs = Zone.objects.filter(client=client_profile)
             zones_deleted = zones_qs.count()
             zones_qs.delete()
+            # Reset denormalized counters
+            ClientProfile.objects.filter(id=client_profile.id).update(total_voters=0, voted_count=0)
         return JsonResponse({
             "status": "success",
             "deleted_count": deleted_count,
@@ -337,6 +423,12 @@ def upload_voters_to_zone(request):
             Voter.objects.create(client=client_profile, dni=dni_val, name=name_val, voted=False, zone=zone)
             created += 1
 
+    # Recompute denormalized counters after this zone upload
+    try:
+        recompute_client_counters(client_profile)
+    except Exception:
+        pass
+
     return JsonResponse({
         "status": "success",
         "zone": zone.name,
@@ -344,6 +436,30 @@ def upload_voters_to_zone(request):
         "updated": updated,
         "skipped": skipped
     })
+
+
+def recompute_client_counters(client_profile: ClientProfile) -> None:
+    """Recompute denormalized counters for a given client and its zones.
+    Safe to call after bulk operations (uploads, deletes).
+    """
+    # Client totals
+    total = Voter.objects.filter(client=client_profile).count()
+    voted = Voter.objects.filter(client=client_profile, voted=True).count()
+    ClientProfile.objects.filter(id=client_profile.id).update(total_voters=total, voted_count=voted)
+
+    # Zone totals: build maps of counts per zone
+    by_zone = (
+        Voter.objects
+        .filter(client=client_profile)
+        .values('zone_id')
+        .annotate(total=Count('id'), voted=Count('id', filter=Q(voted=True)))
+    )
+    counts_map = {row['zone_id']: (row['total'], row['voted']) for row in by_zone}
+
+    # Update all zones for this client; default to 0 when no voters
+    for z in Zone.objects.filter(client=client_profile).only('id'):
+        t, v = counts_map.get(z.id, (0, 0))
+        Zone.objects.filter(id=z.id).update(total_voters=t, voted_count=v)
 
 @login_required
 def pending_voters(request):

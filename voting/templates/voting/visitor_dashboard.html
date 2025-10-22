@@ -6,17 +6,26 @@
 {% endblock %}
 
 {% block content %}
-<h1>Bienvenido al Panel de Visitantes</h1>
-
-<hr>
+<h1 class="mb-8">Panel de Visitantes</h1>
+<p class="muted mt-0">Buscá votantes por DNI y monitoreá el avance por zona.</p>
 
 <!-- Search Bar -->
-<div class="search-row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-    <input type="text" id="search-dni" placeholder="Buscar por DNI" inputmode="numeric" pattern="[0-9]*" style="max-width: 220px; width: 100%;">
+<div class="search-row card row p-10">
+    <input type="text" id="search-dni" placeholder="DNI" inputmode="numeric" pattern="[0-9]*" class="w-100 max-w-220">
+    <button id="send-button" class="btn btn-success">Enviar</button>
     <button id="search-button" class="btn btn-primary">Buscar</button>
+    <div id="fast-feedback" class="inline-feedback hidden"></div>
     </div>
 
-<div class="zone-filter-block" style="margin-top:16px;">
+<!-- Voter Details Area directly under search (messages appear here) -->
+<div id="voter-details" class="mt-12">
+    <!-- Search / send results will be displayed here -->
+    <div id="voter-skeleton" class="skeleton skeleton-card hidden"></div>
+    </div>
+
+<div class="card mt-16 p-10">
+    <button id="show-progress" class="btn">Mostrar progreso</button>
+    <div id="zone-block" class="zone-filter-block mt-12" style="display:none;">
     <label for="zone-select"><strong>Zonas:</strong></label>
     <select id="zone-select" style="min-width:220px;"></select>
     <span class="zone-progress-summary" style="margin-left:12px; font-weight:600; font-size:.9rem; display:none;">0/0 (0%)</span>
@@ -25,19 +34,17 @@
             <div class="zone-fill" style="width:0;"></div>
         </div>
     </div>
-    <!-- Voter Details Area moved directly below search -->
-    <div id="voter-details" style="margin-top: 12px;">
-        <!-- Search results will be displayed here -->
-    </div>
-    <div class="pending-actions" style="margin-top:20px;">
-        <div style="display:flex; gap:8px;">
-            <button id="load-pending-button" class="btn btn-primary" style="background:#6f42c1; border-color:#6f42c1;">Lista de pendientes</button>
-            <button id="refresh-button" class="btn btn-secondary" style="background:#198754; border-color:#198754; color:#fff;">Actualizar</button>
+    <div id="zone-skel" class="skeleton skeleton-bar hidden mt-6" style="max-width:420px;"></div>
+    <div class="pending-actions mt-16">
+        <div class="row">
+            <button id="load-pending-button" class="btn btn-purple">Lista de pendientes</button>
+            <button id="refresh-button" class="btn btn-success">Actualizar</button>
         </div>
         <button id="load-more-pending" class="btn" style="display:none;">Cargar más</button>
     </div>
-    <div id="pending-meta" style="margin-top:6px; font-size:.75rem; color:#6c757d; display:none;"></div>
-    <div id="pending-list" class="pending-list" style="margin-top:8px; display:none;"></div>
+    <div id="pending-meta" class="muted mt-6" style="font-size:.85rem; display:none;"></div>
+    <div id="pending-list" class="pending-list mt-8" style="display:none;"></div>
+    </div>
 </div>
 
 <!-- (Removed duplicate voter-details block) -->
@@ -67,11 +74,47 @@ $(document).ready(function () {
             return tokenElement ? tokenElement.value : null;
         }
 
-        $("#search-button").on("click", function () {
+        const voterSkeleton = document.getElementById('voter-skeleton');
+        const fastFeedback = document.getElementById('fast-feedback');
+        function showFastFeedback(text){
+            if (!fastFeedback) return;
+            fastFeedback.textContent = text;
+            fastFeedback.classList.remove('hidden');
+            setTimeout(()=>fastFeedback.classList.add('hidden'), 1500);
+        }
+        function sendMark(){
+            var dni = $("#search-dni").val().trim();
+            if (!dni) { return; }
+            // Clear Django message banners on interaction
+            $(".messages").remove();
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+            if (!csrfToken) { return; }
+            $.ajax({
+                url: "{% url 'voting:mark_by_dni_set' %}",
+                type: "POST",
+                headers: { "X-CSRFToken": csrfToken },
+                data: { dni: dni },
+                success: function(resp){
+                    if (resp.status === 'success') {
+                        // Show a green success box below, similar to search no-match
+                        $("#voter-details").html(`<p class="success-message">${dni} enviado</p>`);
+                        showFastFeedback('Marcado como Votó');
+                    }
+                    else {
+                        $("#voter-details").html(`<p class="error-message">${resp.message || 'Error'}</p>`);
+                        showFastFeedback(resp.message || 'Error');
+                    }
+                },
+                error: function(){ showFastFeedback('Error de red'); }
+            });
+        }
+        function triggerSearch(){
             var dni = $("#search-dni").val().trim();
                 if (!dni) { return; }
             // Clear Django message banners on interaction
             $(".messages").remove();
+            if (voterSkeleton) voterSkeleton.classList.remove('hidden');
+            $("#voter-details").empty();
 
             $.ajax({
                 url: "{% url 'voting:search_voter_by_dni' %}",
@@ -100,12 +143,18 @@ $(document).ready(function () {
                     } else {
                         $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
                     }
+                    if (voterSkeleton) voterSkeleton.classList.add('hidden');
                 },
                 error: function () {
                     $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
+                    if (voterSkeleton) voterSkeleton.classList.add('hidden');
                 }
             });
-        });
+        }
+
+    $("#search-button").on("click", triggerSearch);
+    $("#send-button").on("click", sendMark);
+    $("#search-dni").on("keyup", function(e){ if (e.key === 'Enter') { sendMark(); } });
 
         // Event delegation for marking a voter
         $("#voter-details").on("click", ".mark-voted", function (e) {
@@ -162,13 +211,16 @@ $(document).ready(function () {
         const PAGE_SIZE = 100;
 
         function fetchZones(cb) {
+            const zsk = document.getElementById('zone-skel');
+            if (zsk) zsk.classList.remove('hidden');
             $.get('{% url "voting:get_zone_stats" %}', function(resp){
                 if (resp.status !== 'success') { console.warn('Fallo carga zonas'); if(cb) cb(); return; }
                 zonesCache = resp.zones || [];
                 buildZoneSelect();
                 if (cb) cb();
-            }).fail(function(){ console.error('Error HTTP zonas'); if(cb) cb(); });
-        }
+            }).fail(function(){ console.error('Error HTTP zonas'); if(cb) cb(); })
+            .always(function(){ if (zsk) zsk.classList.add('hidden'); });
+    }
         function buildZoneSelect() {
             zoneSelect.innerHTML = '';
             const optAll = document.createElement('option');
@@ -290,8 +342,16 @@ $(document).ready(function () {
                 refreshAll({ preservePending:true });
             });
         }
-
-        fetchZones();
+        // Lazy-load zone block
+        const showProgressBtn = document.getElementById('show-progress');
+        const zoneBlock = document.getElementById('zone-block');
+        if (showProgressBtn && zoneBlock) {
+            showProgressBtn.addEventListener('click', function(){
+                showProgressBtn.disabled = true;
+                zoneBlock.style.display = 'block';
+                fetchZones();
+            });
+        }
         // end zone logic
     }
     // Initialize page behavior now that TEXTS is defined

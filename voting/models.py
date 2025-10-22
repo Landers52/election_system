@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 
@@ -9,6 +10,9 @@ class ClientProfile(models.Model):
         User, on_delete=models.CASCADE, related_name="visitor_profile", null=True, blank=True
     )
     organization_name = models.CharField(max_length=255, default="radicales")
+    # Denormalized totals for performance
+    total_voters = models.IntegerField(default=0)
+    voted_count = models.IntegerField(default=0)
 
     def delete(self, *args, **kwargs):
         """ Ensure the visitor account is deleted when the client profile is deleted. """
@@ -22,7 +26,7 @@ class ClientProfile(models.Model):
 class Voter(models.Model):
     client = models.ForeignKey(ClientProfile, on_delete=models.CASCADE, related_name='voters')
     name = models.CharField(max_length=255)
-    dni = models.CharField(max_length=20, unique=True)
+    dni = models.CharField(max_length=20)
     voted = models.BooleanField(default=False)
     # Zone will be added via new Zone model; nullable for backward compatibility then enforced logically
     zone = models.ForeignKey('Zone', on_delete=models.SET_NULL, null=True, blank=True, related_name='voters')
@@ -37,38 +41,73 @@ class Voter(models.Model):
             models.Index(
                 fields=["client", "zone"],
                 name="voter_client_zone_notvoted_idx",
-                condition=models.Q(voted=False),
+                condition=Q(voted=False),
             ),
+        ]
+        constraints = [
+            models.UniqueConstraint(fields=["client", "dni"], name="voter_client_dni_uniq"),
         ]
 
 @receiver(post_save, sender=User)
 def create_client_profile(sender, instance, created, **kwargs):
-    """ Create a ClientProfile for each new User (excluding superusers and visitor users). """
-    if created and not instance.is_superuser and not instance.username.startswith("visitor_"):
-        # Create the ClientProfile for the main user
-        ClientProfile.objects.create(user=instance)
+    """Create a ClientProfile for each new client user (skip superusers and visitor/asiste users)."""
+    if not created:
+        return
+    if instance.is_superuser:
+        return
+    # Skip auto-creation for shadow/visitor users
+    if instance.username.startswith("visitor_") or instance.username.startswith("asiste"):
+        return
+    # Idempotent creation
+    ClientProfile.objects.get_or_create(user=instance)
 
 @receiver(post_save, sender=User)
-def create_visitor(sender, instance, created, **kwargs):
-    if created and not instance.is_superuser:
-        # Ensure it's not creating visitors for visitors
-        if instance.username.startswith("visitor_"):
-            return  # Exit to avoid recursion
+def sync_visitor_account(sender, instance, created, **kwargs):
+    """Ensure every client user keeps a mirrored visitor account with matching credentials."""
+    if instance.is_superuser or instance.username.startswith("visitor_") or instance.username.startswith("asiste"):
+        return
 
-        visitor_username = f"visitor_{instance.username}"[:150]  # Trim if needed
+    visitor_username = f"asiste{instance.username}"[:150]
+    profile, _ = ClientProfile.objects.get_or_create(user=instance)
+    visitor = profile.visitor_user
 
-        if not User.objects.filter(username=visitor_username).exists():
-            visitor = User.objects.create_user(
-                username=visitor_username,
-                password=instance.password  # Use the same password as the main user
-            )
-            visitor.save()
+    if visitor and visitor.username != visitor_username:
+        # The visitor username should track the main username.
+        visitor.username = visitor_username
+        visitor.save(update_fields=["username"])
 
-            # Link the visitor user to the ClientProfile
-            if hasattr(instance, 'clientprofile'):
-                client_profile = instance.clientprofile
-                client_profile.visitor_user = visitor
-                client_profile.save()
+    if not visitor:
+        visitor, _ = User.objects.get_or_create(username=visitor_username)
+
+    fields_to_update = []
+    if visitor.password != instance.password:
+        visitor.password = instance.password
+        fields_to_update.append("password")
+    if visitor.first_name != instance.first_name:
+        visitor.first_name = instance.first_name
+        fields_to_update.append("first_name")
+    if visitor.last_name != instance.last_name:
+        visitor.last_name = instance.last_name
+        fields_to_update.append("last_name")
+    if visitor.email != instance.email:
+        visitor.email = instance.email
+        fields_to_update.append("email")
+    if visitor.is_active != instance.is_active:
+        visitor.is_active = instance.is_active
+        fields_to_update.append("is_active")
+    if visitor.is_staff:
+        visitor.is_staff = False
+        fields_to_update.append("is_staff")
+    if visitor.is_superuser:
+        visitor.is_superuser = False
+        fields_to_update.append("is_superuser")
+
+    if fields_to_update:
+        visitor.save(update_fields=fields_to_update)
+
+    if profile.visitor_user_id != visitor.id:
+        profile.visitor_user = visitor
+        profile.save(update_fields=["visitor_user"])
 
 @receiver(post_delete, sender=ClientProfile)
 def delete_visitor_user(sender, instance, **kwargs):
@@ -80,6 +119,9 @@ class Zone(models.Model):
     client = models.ForeignKey(ClientProfile, on_delete=models.CASCADE, related_name='zones')
     name = models.CharField(max_length=120)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Denormalized counts for this zone
+    total_voters = models.IntegerField(default=0)
+    voted_count = models.IntegerField(default=0)
 
     class Meta:
         unique_together = ("client", "name")

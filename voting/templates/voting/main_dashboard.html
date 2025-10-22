@@ -6,50 +6,55 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 {% block content %}
-<h1>Bienvenido al Panel Principal</h1>
-<div id="inline-feedback" class="inline-feedback" style="display:none;"></div>
+<div class="text-center" style="margin-top: 8px;">
+    {% if party_name %}
+        <div class="org-name">{{ party_name }}</div>
+    {% endif %}
+    <h1 class="mt-0 mb-8" style="font-weight:700;">Panel Principal</h1>
+</div>
+<p class="muted mt-0">Cargá, administrá y monitoreá el avance de votación por zona.</p>
+<div id="inline-feedback" class="inline-feedback hidden"></div>
 
-<!-- Actions grid: left (upload), right (delete) -->
+<!-- Actions grid: izquierda (carga), derecha (borrado) -->
 <div class="actions-grid">
-    <div class="col">
-        <!-- Voter Upload Form -->
+    <div class="col card">
+        <!-- Votantes: Carga -->
         <form id="upload-form" method="post" enctype="multipart/form-data" data-voter-count="{{ voter_count|default:0 }}">
             {% csrf_token %}
             <input type="hidden" name="confirm_replace" id="confirm-replace" value="no">
             <div class="custom-file-upload">
                 <input type="file" name="file" id="file" class="file-input" required style="display:none;" accept=".xlsx">
                 <div class="file-actions-row">
-                    <label for="file" class="file-label button-like-label" style="white-space:nowrap;">
+                                <label for="file" class="file-label button-like-label nowrap">
                         Elegir archivo <span class="file-text">(ninguno seleccionado)</span>
                     </label>
                     <button type="submit" id="upload-button" class="btn btn-primary">Subir lista</button>
-                    <button type="button" id="upload-zone-button" class="btn btn-primary" style="background:#198754; border-color:#198754;">Subir a nueva zona</button>
+                    <button type="button" id="upload-zone-button" class="btn btn-success">Subir a nueva zona</button>
                 </div>
             </div>
         </form>
         <small class="hint">Formatos aceptados: .xlsx (Excel). La importación ignora filas sin DNI o Nombre.</small>
     </div>
-    <div class="col">
+    <div class="col card">
         <div class="delete-box">
             <button id="clear-list-button" class="btn btn-soft-danger" type="button" disabled>Borrar lista</button>
             <small class="hint">Elimina todos los votantes cargados para tu cuenta. Esta acción no se puede deshacer.</small>
         </div>
     </div>
-    
 </div>
 
-<!-- Confirmation Dialog (Initially Hidden) -->
-<div id="confirmation-dialog" class="confirmation-dialog" style="display:none;">
+<!-- Diálogo de confirmación -->
+<div id="confirmation-dialog" class="confirmation-dialog card hidden max-w-520">
     <p id="confirmation-message">Confirmar acción</p>
     <div class="dialog-buttons">
-        <button id="confirm-action-button" class="btn btn-danger">Confirmar</button>
+    <button id="confirm-action-button" class="btn btn-danger">Confirmar</button>
         <button id="cancel-action-button" class="btn">Cancelar</button>
     </div>
 </div>
 
-<!-- Upload to Zone Modal -->
-<div id="zone-upload-overlay" class="modal-overlay" style="display:none;"></div>
-<div id="zone-upload-dialog" class="modal-dialog" style="display:none;">
+<!-- Modal: subir a nueva zona -->
+<div id="zone-upload-overlay" class="modal-overlay hidden"></div>
+<div id="zone-upload-dialog" class="modal-dialog hidden">
     <h3>Subir a nueva zona</h3>
     <div class="modal-body">
         <label for="zone-name-input"><strong>Nombre de la zona</strong></label>
@@ -57,31 +62,31 @@
         <div id="zone-name-error" class="modal-error" style="display:none;"></div>
     </div>
     <div class="dialog-buttons">
-        <button id="zone-upload-confirm" class="btn btn-primary">Subir</button>
+    <button id="zone-upload-confirm" class="btn btn-primary">Subir</button>
         <button id="zone-upload-cancel" class="btn">Cancelar</button>
     </div>
     <small class="hint">Se creará la zona si no existe. Evitaremos nombres duplicados.</small>
     <div class="modal-close" id="zone-upload-close">×</div>
-    
 </div>
 
 <hr>
 
-<!-- Search Bar -->
-<div class="search-row" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-    <input type="text" id="search-dni" placeholder="Buscar por DNI" inputmode="numeric" pattern="[0-9]*" style="max-width: 220px; width: 100%;">
+<!-- Buscador de votantes -->
+<div class="search-row card row p-10">
+    <input type="text" id="search-dni" placeholder="Buscar por DNI" inputmode="numeric" pattern="[0-9]*" class="w-100 max-w-220">
     <button id="search-button" class="btn btn-primary">Buscar</button>
-    </div>
+</div>
 
-<!-- Voter Details Area -->
-<div id="voter-details" style="margin-top: 20px;">
+<!-- Resultado de búsqueda -->
+<div id="voter-details" class="card mt-14">
     <!-- Search results will be displayed here -->
+    <div id="voter-skeleton" class="skeleton skeleton-card hidden"></div>
 </div>
 
 <hr>
 
-<!-- Progress Section (moved below all content) -->
-<div class="progress-container" id="overall-progress">
+<!-- Progreso general -->
+<div class="progress-container card" id="overall-progress">
     <div class="overall-header">
         <h3>Progreso de Votación (General)</h3>
         <span class="overall-summary">0/0 (0%)</span>
@@ -92,17 +97,18 @@
     <div class="no-voters-message" style="display: none;">
         No se han registrado votantes aún. Por favor sube una lista de votantes para comenzar.
     </div>
+    <div id="stats-skeleton" class="skeleton skeleton-bar hidden mt-8"></div>
 </div>
 
-<!-- Per-Zone Progress List -->
-<div id="zone-progress-list" class="zone-progress-list" style="margin-top:16px;"></div>
+<!-- Progreso por zona -->
+<div id="zone-progress-list" class="zone-progress-list mt-16"></div>
+<div id="zone-skeleton" class="skeleton skeleton-card hidden mt-16"></div>
 
-<!-- Zone distribution chart -->
-<div id="zone-chart-wrap" style="margin-top:16px;">
+<!-- Gráfico por zonas -->
+<div id="zone-chart-wrap" class="card mt-16">
     <h3>Distribución por zonas</h3>
     <canvas id="zone-distribution-chart" height="120"></canvas>
     <div id="no-zone-chart" class="status-hint" style="display:none;">No hay datos de zonas para graficar.</div>
-    
 </div>
 
 <script>
@@ -137,6 +143,9 @@ $(document).ready(function () {
         const confirmReplaceInput = document.getElementById('confirm-replace');
     const clearListButton = document.getElementById('clear-list-button');
     const inlineFeedback = document.getElementById('inline-feedback');
+    const voterSkeleton = document.getElementById('voter-skeleton');
+    const statsSkeleton = document.getElementById('stats-skeleton');
+    const zoneSkeleton = document.getElementById('zone-skeleton');
     // Zone modal elements
     const zoneOverlay = document.getElementById('zone-upload-overlay');
     const zoneDialog = document.getElementById('zone-upload-dialog');
@@ -198,11 +207,14 @@ $(document).ready(function () {
             return document.querySelector('[name=csrfmiddlewaretoken]').value;
         }
 
-        $("#search-button").on("click", function () {
+        function triggerSearch(){
             var dni = $("#search-dni").val().trim();
             if (!dni) { return; } // No-op on empty search
             // Clear Django message banners on interaction
             $(".messages").remove();
+            // Show skeleton
+            if (voterSkeleton) voterSkeleton.classList.remove('hidden');
+            $("#voter-details").empty();
             $.ajax({
                 url: "{% url 'voting:search_voter_by_dni' %}",
                 type: "POST",
@@ -231,14 +243,20 @@ $(document).ready(function () {
                     } else {
                         $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
                     }
+                    if (voterSkeleton) voterSkeleton.classList.add('hidden');
                 },
                 error: function () {
                     $("#voter-details").html(`<p class="error-message">${texts.error_occurred}</p>`);
+                    if (voterSkeleton) voterSkeleton.classList.add('hidden');
                 }
             });
-        });
+        }
+
+        $("#search-button").on("click", triggerSearch);
+        $("#search-dni").on("keyup", function(e){ if (e.key === 'Enter') { triggerSearch(); } });
 
         function updateVoterStats() {
+            if (statsSkeleton) statsSkeleton.classList.remove('hidden');
             $.ajax({
                 url: "{% url 'voting:get_voter_stats' %}",
                 type: "GET",
@@ -266,29 +284,142 @@ $(document).ready(function () {
                             $('#overall-progress .overall-summary').text(`${stats.voted_count}/${stats.total_voters} (${stats.percentage}%)`);
                         }
                     }
+                    if (statsSkeleton) statsSkeleton.classList.add('hidden');
+                },
+                error: function(){
+                    if (statsSkeleton) statsSkeleton.classList.add('hidden');
                 }
             });
         }
 
         function renderZoneBars(zones) {
-            const container = $('#zone-progress-list');
-            container.empty();
-            if (!zones || zones.length === 0) return;
-            zones.forEach(z => {
-                const pct = z.percentage || 0;
-                const zoneItem = $(`
-                    <div class="zone-item">
-                        <div class="zone-header"><span class="zone-name">${z.name}</span><span class="zone-stats">${z.voted_count}/${z.total_voters} (${pct}%)</span></div>
-                        <div class="zone-bar">
-                            <div class="zone-fill" style="width:${pct}%"></div>
+                const container = $('#zone-progress-list');
+                // Preserve which zones were expanded
+                const expanded = new Set();
+                container.find('.zone-pending-block').each(function(){
+                    const zid = $(this).data('zone-id');
+                    if ($(this).is(':visible')) expanded.add(String(zid));
+                });
+                container.empty();
+                if (!zones || zones.length === 0) return;
+                zones.forEach(z => {
+                    const pct = z.percentage || 0;
+                    const pendingCount = Math.max((z.total_voters || 0) - (z.voted_count || 0), 0);
+                    const zoneItem = $(`
+                        <div class="zone-item" data-zone-id="${z.id}">
+                            <div class="zone-header">
+                                <span class="zone-name">${z.name}</span>
+                                <span class="zone-stats">${z.voted_count}/${z.total_voters} (${pct}%)</span>
+                            </div>
+                            <div class="zone-bar">
+                                <div class="zone-fill" style="width:${pct}%"></div>
+                            </div>
+                            <div class="row mt-8">
+                                <button class="btn btn-purple zone-toggle-pending" data-zone-id="${z.id}">${pendingCount} pendientes</button>
+                            </div>
+                            <div class="zone-pending-block mt-8" data-zone-id="${z.id}" style="display:none;">
+                                <div class="pending-list"></div>
+                                <div class="row mt-6">
+                                    <button class="btn zone-load-more" data-zone-id="${z.id}" style="display:none;">Cargar más</button>
+                                    <span class="muted zone-pending-meta" style="display:none; font-size:.85rem;"></span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                `);
-                container.append(zoneItem);
+                    `);
+                    container.append(zoneItem);
+                });
+                // Re-open expanded zones
+                expanded.forEach(function(zid){
+                    const block = container.find(`.zone-pending-block[data-zone-id="${zid}"]`);
+                    if (block.length) {
+                        block.show();
+                        // If empty, trigger load
+                        if (!block.data('loaded')) {
+                            loadZonePending(zid, 1);
+                        }
+                    }
+                });
+            }
+
+            // Per-zone pending state
+            const zonePendingState = {}; // { [zoneId]: { page: number, hasMore: bool, total: number } }
+
+            function loadZonePending(zoneId, nextPage) {
+                const block = $(`.zone-pending-block[data-zone-id="${zoneId}"]`);
+                if (!block.length) return;
+                const list = block.find('.pending-list');
+                const loadMoreBtn = block.find('.zone-load-more');
+                const meta = block.find('.zone-pending-meta');
+                $.get('{% url "voting:pending_voters" %}', { zone_id: zoneId, page: nextPage, page_size: 100 }, function(resp){
+                    if (resp.status !== 'success') return;
+                    const state = zonePendingState[zoneId] || { page: 0, hasMore: false, total: 0 };
+                    state.page = resp.page;
+                    state.hasMore = resp.has_more;
+                    state.total = resp.total;
+                    zonePendingState[zoneId] = state;
+                    renderZonePending(zoneId, resp.voters, state);
+                    block.data('loaded', true);
+                });
+            }
+
+            function renderZonePending(zoneId, voters, state) {
+                const block = $(`.zone-pending-block[data-zone-id="${zoneId}"]`);
+                if (!block.length) return;
+                const list = block.find('.pending-list')[0];
+                const loadMoreBtn = block.find('.zone-load-more');
+                const meta = block.find('.zone-pending-meta');
+                // If first page, clear list
+                if (state.page === 1) {
+                    list.innerHTML = '';
+                }
+                const frag = document.createDocumentFragment();
+                (voters || []).forEach(v => {
+                    const div = document.createElement('div');
+                    div.className = 'pending-item';
+                    div.textContent = `${v.dni} - ${v.name}`;
+                    frag.appendChild(div);
+                });
+                list.appendChild(frag);
+                // Meta and load more
+                const shown = list.children.length;
+                if (state.total > 0) {
+                    meta.show().text(`Mostrando ${shown} de ${state.total} pendientes (${((shown/state.total)*100).toFixed(1)}%)`);
+                } else {
+                    meta.show().text('No hay pendientes');
+                }
+                if (state.hasMore) {
+                    loadMoreBtn.show();
+                } else {
+                    loadMoreBtn.hide();
+                }
+            }
+
+            // Toggle and pagination handlers
+            $('#zone-progress-list').on('click', '.zone-toggle-pending', function(){
+                const zid = String($(this).data('zone-id'));
+                const block = $(`.zone-pending-block[data-zone-id="${zid}"]`);
+                if (!block.length) return;
+                const isVisible = block.is(':visible');
+                if (isVisible) {
+                    block.hide();
+                } else {
+                    block.show();
+                    // If not loaded or was cleared, load first page
+                    const state = zonePendingState[zid];
+                    if (!state || state.page === 0) {
+                        loadZonePending(zid, 1);
+                    }
+                }
             });
-        }
+            $('#zone-progress-list').on('click', '.zone-load-more', function(){
+                const zid = String($(this).data('zone-id'));
+                const state = zonePendingState[zid];
+                const next = (state?.page || 0) + 1;
+                loadZonePending(zid, next);
+            });
 
         function updateZoneStats() {
+            if (zoneSkeleton) zoneSkeleton.classList.remove('hidden');
             $.ajax({
                 url: '{% url "voting:get_zone_stats" %}',
                 type: 'GET',
@@ -299,6 +430,10 @@ $(document).ready(function () {
                         knownZones = new Set((resp.zones || []).map(z => (z.name || '').trim().toLowerCase()));
                         renderZoneChart(resp.zones || []);
                     }
+                    if (zoneSkeleton) zoneSkeleton.classList.add('hidden');
+                },
+                error: function(){
+                    if (zoneSkeleton) zoneSkeleton.classList.add('hidden');
                 }
             });
         }

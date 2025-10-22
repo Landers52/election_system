@@ -5,10 +5,9 @@ services:
     buildCommand: |
       pip install -r requirements.txt
       python manage.py collectstatic --noinput
-    startCommand: gunicorn election_system.wsgi:application --bind=0.0.0.0:10000
+    startCommand: gunicorn election_system.wsgi:application --bind 0.0.0.0:$PORT
+    postDeployCommand: python manage.py migrate
     envVars:
-      - key: PORT
-        value: 10000
       - key: PYTHON_VERSION
         value: 3.13.0
       - key: DJANGO_SETTINGS_MODULE
@@ -27,4 +26,4 @@ services:
       - requirements.txt
       - "**/*.py"
       - "**/*.html"
-  - "**/*"
+      - "**/*.css"

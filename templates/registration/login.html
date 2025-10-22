@@ -1,28 +1,25 @@
 {% extends "base.html" %}
 
 {% block content %}
-<style>
-    .login-container {
-        max-width: 400px;
-        margin: 50px auto;
-        padding: 20px;
-    }
-    form {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-    button {
-        padding: 10px;
-        cursor: pointer;
-    }
-</style>
-<div class="login-container">
-    <h2>Iniciar Sesión</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Iniciar Sesión</button>
-    </form>
-</div>
+    <div class="stack mx-auto max-w-460 mt-48 mb-32">
+        <div class="card">
+            <h2 class="mt-0 mb-8 text-center">Iniciar sesión</h2>
+            <p class="muted mt-0 text-center">Accedé al panel para gestionar las listas y el avance de votación.</p>
+            <form method="post" class="stack mt-12">
+                {% csrf_token %}
+                {% if form.non_field_errors %}
+                    <div class="inline-feedback bad show">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <div class="stack">
+                    <label for="id_username">Usuario</label>
+                    {{ form.username }}
+                </div>
+                <div class="stack">
+                    <label for="id_password">Contraseña</label>
+                    {{ form.password }}
+                </div>
+                <button type="submit" class="btn btn-primary btn-xl w-100 max-w-220 mx-auto mt-12">Iniciar sesión</button>
+            </form>
+        </div>
+    </div>
 {% endblock %}
