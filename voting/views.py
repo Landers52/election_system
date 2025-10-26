@@ -539,7 +539,7 @@ def pending_voters(request):
         page = int(request.GET.get('page', '1'))
         page_size = int(request.GET.get('page_size', '100'))
         page = max(page, 1)
-        page_size = max(10, min(page_size, 500))  # clamp
+        page_size = max(10, min(page_size, 1000))  # clamp (allow larger pages for main dashboard)
 
         qs = Voter.objects.filter(client=client_profile, voted=False)
         if zone_id and zone_id != 'all':

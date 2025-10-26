@@ -317,7 +317,7 @@ $(document).ready(function () {
                                 ${z.name === 'Sin asignar' ? `<button class="btn btn-success zone-refresh-pending" data-zone-id="${z.id}">Actualizar</button>` : ''}
                             </div>
                             <div class="zone-pending-block mt-8" data-zone-id="${z.id}" style="display:none;">
-                                <div class="pending-list"></div>
+                                <div class="pending-list" style="max-height:600px;"></div>
                                 <div class="row mt-6">
                                     <button class="btn zone-load-more" data-zone-id="${z.id}" style="display:none;">Cargar más</button>
                                     <span class="muted zone-pending-meta" style="display:none; font-size:.85rem;"></span>
@@ -349,7 +349,7 @@ $(document).ready(function () {
                 const list = block.find('.pending-list');
                 const loadMoreBtn = block.find('.zone-load-more');
                 const meta = block.find('.zone-pending-meta');
-                $.get('{% url "voting:pending_voters" %}', { zone_id: zoneId, page: nextPage, page_size: 100 }, function(resp){
+                $.get('{% url "voting:pending_voters" %}', { zone_id: zoneId, page: nextPage, page_size: 1000 }, function(resp){
                     if (resp.status !== 'success') return;
                     const state = zonePendingState[zoneId] || { page: 0, hasMore: false, total: 0 };
                     state.page = resp.page;
