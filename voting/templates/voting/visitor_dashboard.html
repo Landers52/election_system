@@ -6,7 +6,7 @@
 {% endblock %}
 
 {% block content %}
-<h1 class="mb-8">Panel de Visitantes</h1>
+<h1 class="mb-8">Panel de asistentes</h1>
 <p class="muted mt-0">Buscá votantes por DNI y monitoreá el avance por zona.</p>
 
 <!-- Search Bar -->
@@ -40,10 +40,12 @@
             <button id="load-pending-button" class="btn btn-purple">Lista de pendientes</button>
             <button id="refresh-button" class="btn btn-success">Actualizar</button>
         </div>
-        <button id="load-more-pending" class="btn" style="display:none;">Cargar más</button>
     </div>
-    <div id="pending-meta" class="muted mt-6" style="font-size:.85rem; display:none;"></div>
     <div id="pending-list" class="pending-list mt-8" style="display:none;"></div>
+    <div id="pending-controls" class="row mt-6" style="display:none;">
+        <button id="load-more-pending" class="btn">Cargar más</button>
+        <span id="pending-meta" class="muted" style="font-size:.85rem;"></span>
+    </div>
     </div>
 </div>
 
@@ -201,7 +203,8 @@ $(document).ready(function () {
         const zoneBarWrapper = document.querySelector('.zone-progress-bar-wrapper');
         const zoneFill = zoneBarWrapper.querySelector('.zone-fill');
         const pendingButton = document.getElementById('load-pending-button');
-        const loadMoreButton = document.getElementById('load-more-pending');
+    const loadMoreButton = document.getElementById('load-more-pending');
+    const pendingControls = document.getElementById('pending-controls');
         const pendingList = document.getElementById('pending-list');
         const pendingMeta = document.getElementById('pending-meta');
         let zonesCache = [];
@@ -266,6 +269,7 @@ $(document).ready(function () {
             pendingPage = 0;
             pendingList.innerHTML = '';
             pendingList.style.display = 'none';
+            pendingControls.style.display = 'none';
             pendingMeta.style.display = 'none';
             loadMoreButton.style.display = 'none';
         }
@@ -302,10 +306,19 @@ $(document).ready(function () {
             voters.forEach(v => {
                 const div = document.createElement('div');
                 div.className = 'pending-item';
-                div.textContent = `${v.dni} - ${v.name}`;
+                const ln = v.last_name || '';
+                const fn = v.first_name || '';
+                const sx = v.sex || '';
+                const addr = v.address || '';
+                const mesa = (v.mesa ?? '') === null ? '' : (v.mesa ?? '');
+                const orden = (v.orden ?? '') === null ? '' : (v.orden ?? '');
+                const est = v.establecimiento || '';
+                div.textContent = `${v.dni} - ${ln}, ${fn} | Sexo: ${sx} | Dirección: ${addr} | Mesa: ${mesa} | Orden: ${orden} | Establecimiento: ${est}`;
                 frag.appendChild(div);
             });
             pendingList.appendChild(frag);
+            // Show controls row and meta below the list
+            pendingControls.style.display = 'flex';
             pendingMeta.style.display = 'block';
             const shown = pendingList.children.length;
             const pct = total > 0 ? ((shown/total)*100).toFixed(1) : 0;

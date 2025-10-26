@@ -50,9 +50,9 @@ def main_dashboard(request):
             return redirect('voting:main_dashboard')
 
         # Step 3: Validate Columns
-        required_columns = ['dni', 'name']
+        required_columns = ['dni', 'Apellido', 'Nombre']
         if not all(col in df.columns for col in required_columns):
-            messages.error(request, "El archivo de Excel debe contener las columnas 'dni' y 'name'.")
+            messages.error(request, "El archivo de Excel debe contener las columnas 'dni', 'Apellido' y 'Nombre'.")
             return redirect('voting:main_dashboard') # Redirect *before* deletion check
 
         # --- All file/column validations passed ---
@@ -79,8 +79,14 @@ def main_dashboard(request):
             for index, row in df.iterrows():
                 # Normalize and validate values
                 dni_val = '' if pd.isna(row.get('dni')) else str(row.get('dni')).strip()
-                name_val = '' if pd.isna(row.get('name')) else str(row.get('name')).strip()
-                if not dni_val or not name_val:
+                last_name = '' if pd.isna(row.get('Apellido')) else str(row.get('Apellido')).strip()
+                first_name = '' if pd.isna(row.get('Nombre')) else str(row.get('Nombre')).strip()
+                sex = '' if pd.isna(row.get('Sexo')) else str(row.get('Sexo')).strip().upper()
+                address = '' if pd.isna(row.get('Direccion')) else str(row.get('Direccion')).strip()
+                mesa = None if pd.isna(row.get('Mesa')) else int(row.get('Mesa')) if str(row.get('Mesa')).strip().isdigit() else None
+                orden = None if pd.isna(row.get('Orden')) else int(row.get('Orden')) if str(row.get('Orden')).strip().isdigit() else None
+                establecimiento = '' if pd.isna(row.get('Establecimiento')) else str(row.get('Establecimiento')).strip()
+                if not dni_val or not last_name or not first_name:
                     messages.warning(request, f"Fila {index + 2} omitida: Falta DNI o Nombre.")
                     continue
 
@@ -88,20 +94,39 @@ def main_dashboard(request):
                 voter = Voter.objects.filter(client=client_profile, dni=dni_val).first()
                 if voter:
                     changed = False
-                    if voter.name != name_val:
-                        voter.name = name_val
+                    if (voter.last_name != last_name) or (voter.first_name != first_name):
+                        voter.last_name = last_name
+                        voter.first_name = first_name
                         changed = True
+                    # always sync other fields if changed
+                    field_updates = []
+                    if voter.sex != sex:
+                        voter.sex = sex; field_updates.append('sex')
+                    if voter.address != address:
+                        voter.address = address; field_updates.append('address')
+                    if voter.mesa != mesa:
+                        voter.mesa = mesa; field_updates.append('mesa')
+                    if voter.orden != orden:
+                        voter.orden = orden; field_updates.append('orden')
+                    if voter.establecimiento != establecimiento:
+                        voter.establecimiento = establecimiento; field_updates.append('establecimiento')
                     if voter.zone_id != default_zone.id:
                         voter.zone = default_zone
                         changed = True
-                    if changed:
-                        voter.save(update_fields=['name', 'zone'])
+                    if changed or field_updates:
+                        voter.save(update_fields=['last_name', 'first_name', 'zone'] + field_updates)
                         updated += 1
                 else:
                     Voter.objects.create(
                         client=client_profile,
                         dni=dni_val,
-                        name=name_val,
+                        last_name=last_name,
+                        first_name=first_name,
+                        sex=sex,
+                        address=address,
+                        mesa=mesa,
+                        orden=orden,
+                        establecimiento=establecimiento,
                         voted=False,
                         zone=default_zone
                     )
@@ -170,13 +195,21 @@ def search_voter_by_dni(request):
             "message": "No se encontró ningún votante con ese DNI."
         })
 
+    full_name = f"{voter.last_name}, {voter.first_name}".strip(', ')
     return JsonResponse({
         "status": "success",
         "voter": {
             "id": voter.id,
-            "name": voter.name,
+            "name": full_name,
+            "last_name": voter.last_name,
+            "first_name": voter.first_name,
             "dni": voter.dni,
             "voted": voter.voted,
+            "sex": voter.sex,
+            "address": voter.address,
+            "mesa": voter.mesa,
+            "orden": voter.orden,
+            "establecimiento": voter.establecimiento,
             "zone": voter.zone.name if voter.zone else 'Sin asignar'
         }
     })
@@ -393,8 +426,8 @@ def upload_voters_to_zone(request):
         return JsonResponse({"status": "error", "message": f"Error leyendo Excel: {str(e)}"})
 
     required_columns = ['dni', 'name']
-    if not all(col in df.columns for col in required_columns):
-        return JsonResponse({"status": "error", "message": "El archivo debe tener columnas 'dni' y 'name'"}, status=400)
+    if not all(col in df.columns for col in ['dni', 'Apellido', 'Nombre']):
+        return JsonResponse({"status": "error", "message": "El archivo debe tener columnas 'dni', 'Apellido' y 'Nombre'"}, status=400)
 
     zone, _ = Zone.objects.get_or_create(client=client_profile, name=zone_name)
     created = 0
@@ -402,25 +435,55 @@ def upload_voters_to_zone(request):
     skipped = 0
     for index, row in df.iterrows():
         dni_val = str(row.get('dni')).strip() if not pd.isna(row.get('dni')) else ''
-        name_val = str(row.get('name')).strip() if not pd.isna(row.get('name')) else ''
-        if not dni_val or not name_val:
+        last_name = '' if pd.isna(row.get('Apellido')) else str(row.get('Apellido')).strip()
+        first_name = '' if pd.isna(row.get('Nombre')) else str(row.get('Nombre')).strip()
+        sex = '' if pd.isna(row.get('Sexo')) else str(row.get('Sexo')).strip().upper()
+        address = '' if pd.isna(row.get('Direccion')) else str(row.get('Direccion')).strip()
+        mesa = None if pd.isna(row.get('Mesa')) else int(row.get('Mesa')) if str(row.get('Mesa')).strip().isdigit() else None
+        orden = None if pd.isna(row.get('Orden')) else int(row.get('Orden')) if str(row.get('Orden')).strip().isdigit() else None
+        establecimiento = '' if pd.isna(row.get('Establecimiento')) else str(row.get('Establecimiento')).strip()
+        if not dni_val or not last_name or not first_name:
             skipped += 1
             continue
         voter = Voter.objects.filter(client=client_profile, dni=dni_val).first()
         if voter:
             # Update name + zone (don't touch voted flag)
             changed = False
-            if voter.name != name_val:
-                voter.name = name_val
+            field_updates = []
+            if (voter.last_name != last_name) or (voter.first_name != first_name):
+                voter.last_name = last_name
+                voter.first_name = first_name
                 changed = True
+            if voter.sex != sex:
+                voter.sex = sex; field_updates.append('sex')
+            if voter.address != address:
+                voter.address = address; field_updates.append('address')
+            if voter.mesa != mesa:
+                voter.mesa = mesa; field_updates.append('mesa')
+            if voter.orden != orden:
+                voter.orden = orden; field_updates.append('orden')
+            if voter.establecimiento != establecimiento:
+                voter.establecimiento = establecimiento; field_updates.append('establecimiento')
             if voter.zone_id != zone.id:
                 voter.zone = zone
                 changed = True
-            if changed:
-                voter.save(update_fields=['name', 'zone'])
+            if changed or field_updates:
+                voter.save(update_fields=['last_name', 'first_name', 'zone'] + field_updates)
                 updated += 1
         else:
-            Voter.objects.create(client=client_profile, dni=dni_val, name=name_val, voted=False, zone=zone)
+            Voter.objects.create(
+                client=client_profile,
+                dni=dni_val,
+                last_name=last_name,
+                first_name=first_name,
+                sex=sex,
+                address=address,
+                mesa=mesa,
+                orden=orden,
+                establecimiento=establecimiento,
+                voted=False,
+                zone=zone
+            )
             created += 1
 
     # Recompute denormalized counters after this zone upload
@@ -484,7 +547,10 @@ def pending_voters(request):
 
         total = qs.count()
         offset = (page - 1) * page_size
-        voters = list(qs.order_by('dni').values('dni', 'name')[offset: offset + page_size])
+        voters = list(
+            qs.order_by('mesa', 'orden', 'dni')
+              .values('dni', 'last_name', 'first_name', 'sex', 'address', 'mesa', 'orden', 'establecimiento')[offset: offset + page_size]
+        )
         has_more = offset + page_size < total
 
         return JsonResponse({

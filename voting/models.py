@@ -25,14 +25,23 @@ class ClientProfile(models.Model):
 
 class Voter(models.Model):
     client = models.ForeignKey(ClientProfile, on_delete=models.CASCADE, related_name='voters')
-    name = models.CharField(max_length=255)
     dni = models.CharField(max_length=20)
     voted = models.BooleanField(default=False)
     # Zone will be added via new Zone model; nullable for backward compatibility then enforced logically
     zone = models.ForeignKey('Zone', on_delete=models.SET_NULL, null=True, blank=True, related_name='voters')
+    # New detailed fields
+    last_name = models.CharField(max_length=255, blank=True, default='')  # Apellido
+    first_name = models.CharField(max_length=255, blank=True, default='')  # Nombre
+    sex = models.CharField(max_length=1, blank=True, default='')  # 'F' or 'M'
+    address = models.CharField(max_length=255, blank=True, default='')  # Direccion
+    mesa = models.IntegerField(null=True, blank=True)
+    orden = models.IntegerField(null=True, blank=True)
+    establecimiento = models.CharField(max_length=255, blank=True, default='')
 
     def __str__(self):
-        return f"{self.name} ({'Voted' if self.voted else 'Not Voted'})"
+        full = (self.last_name + ", " + self.first_name).strip(', ')
+        label = full or self.dni
+        return f"{label} ({'Voted' if self.voted else 'Not Voted'})"
 
     class Meta:
         indexes = [
@@ -41,6 +50,12 @@ class Voter(models.Model):
             models.Index(
                 fields=["client", "zone"],
                 name="voter_client_zone_notvoted_idx",
+                condition=Q(voted=False),
+            ),
+            # Optimize ordering of pending by mesa, orden
+            models.Index(
+                fields=["client", "zone", "mesa", "orden"],
+                name="voter_cz_mo_notv",
                 condition=Q(voted=False),
             ),
         ]
