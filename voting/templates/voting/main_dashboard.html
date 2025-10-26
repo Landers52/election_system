@@ -314,6 +314,7 @@ $(document).ready(function () {
                             </div>
                             <div class="row mt-8">
                                 <button class="btn btn-purple zone-toggle-pending" data-zone-id="${z.id}">${pendingCount} pendientes</button>
+                                ${z.name === 'Sin asignar' ? `<button class="btn btn-success zone-refresh-pending" data-zone-id="${z.id}">Actualizar</button>` : ''}
                             </div>
                             <div class="zone-pending-block mt-8" data-zone-id="${z.id}" style="display:none;">
                                 <div class="pending-list"></div>
@@ -421,6 +422,26 @@ $(document).ready(function () {
                 const state = zonePendingState[zid];
                 const next = (state?.page || 0) + 1;
                 loadZonePending(zid, next);
+            });
+
+            // Manual refresh for "Sin asignar" zone only
+            $('#zone-progress-list').on('click', '.zone-refresh-pending', function(){
+                const zid = String($(this).data('zone-id'));
+                const block = $(`.zone-pending-block[data-zone-id="${zid}"]`);
+                // Ensure the block is visible
+                if (!block.is(':visible')) {
+                    block.show();
+                }
+                // Reset state and list, then load first page fresh
+                zonePendingState[zid] = { page: 0, hasMore: false, total: 0 };
+                block.data('loaded', false);
+                const list = block.find('.pending-list');
+                list.empty();
+                const meta = block.find('.zone-pending-meta');
+                meta.hide().text('');
+                const loadMoreBtn = block.find('.zone-load-more');
+                loadMoreBtn.hide();
+                loadZonePending(zid, 1);
             });
 
         function updateZoneStats() {
