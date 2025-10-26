@@ -15,4 +15,5 @@ urlpatterns = [
     path('pending_voters/', views.pending_voters, name='pending_voters'),  # Paginated pending voters
     path('clear_voters/', views.clear_voters, name='clear_voters'),  # Delete all voters for client
     path('upload_zone/', views.upload_voters_to_zone, name='upload_voters_to_zone'),  # Upload list assigning to a zone
+    path('validate_password/', views.validate_destructive_password, name='validate_password'),  # Validate destructive password
 ]

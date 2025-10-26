@@ -60,6 +60,10 @@ def main_dashboard(request):
         # Step 4 & 5: Deletion Logic (only if needed and validations passed)
         confirm_replace = request.POST.get('confirm_replace') == 'yes'
         if confirm_replace and voter_count > 0:
+            # Require hardcoded password for destructive replace
+            if (request.POST.get('confirm_password') or '') != '09285252':
+                messages.error(request, "Contraseña incorrecta para reemplazar la lista.")
+                return redirect('voting:main_dashboard')
             try:
                 with transaction.atomic():
                     # Delete voters then zones belonging to this client
@@ -367,6 +371,15 @@ def get_zone_stats(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)})
 
+# Lightweight password validator for destructive actions (client-side pre-check)
+@login_required
+@require_POST
+def validate_destructive_password(request):
+    pwd = (request.POST.get('confirm_password') or '').strip()
+    if pwd == '09285252':
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Contraseña incorrecta."})
+
 # The translations endpoint has been removed. All client-side text is hardcoded to Spanish
 # and served directly from templates and views. No runtime translation activation is used.
 
@@ -379,6 +392,10 @@ def clear_voters(request):
     # Only client users can clear their list
     if not hasattr(request.user, 'clientprofile'):
         return JsonResponse({"status": "error", "message": "Acceso denegado"})
+
+    # Require hardcoded password for destructive delete
+    if (request.POST.get('confirm_password') or '') != '09285252':
+        return JsonResponse({"status": "error", "message": "Contraseña incorrecta"})
 
     client_profile = request.user.clientprofile
     try:

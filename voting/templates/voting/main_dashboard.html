@@ -17,9 +17,10 @@
 <div class="actions-grid">
     <div class="col card">
         <!-- Votantes: Carga -->
-        <form id="upload-form" method="post" enctype="multipart/form-data" data-voter-count="{{ voter_count|default:0 }}">
+    <form id="upload-form" method="post" enctype="multipart/form-data" data-voter-count="{{ voter_count|default:0 }}" autocomplete="off">
             {% csrf_token %}
             <input type="hidden" name="confirm_replace" id="confirm-replace" value="no">
+            <input type="hidden" name="confirm_password" id="confirm-password-hidden" value="">
             <div class="custom-file-upload">
                 <input type="file" name="file" id="file" class="file-input" required style="display:none;" accept=".xlsx">
                 <div class="file-actions-row">
@@ -44,6 +45,11 @@
 <!-- Diálogo de confirmación -->
 <div id="confirmation-dialog" class="confirmation-dialog card hidden max-w-520">
     <p id="confirmation-message">Confirmar acción</p>
+    <div class="modal-body">
+        <label for="confirm-password-input"><strong>Contraseña</strong></label>
+    <input id="confirm-password-input" type="password" placeholder="Ingrese la contraseña" autocomplete="new-password" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" name="confirm-password-modal" />
+        <div id="confirm-password-error" class="modal-error" style="display:none;"></div>
+    </div>
     <div class="dialog-buttons">
     <button id="confirm-action-button" class="btn btn-danger">Confirmar</button>
         <button id="cancel-action-button" class="btn">Cancelar</button>
@@ -139,6 +145,9 @@ $(document).ready(function () {
         const cancelActionButton = document.getElementById('cancel-action-button');
         const confirmationMessage = document.getElementById('confirmation-message');
         const confirmReplaceInput = document.getElementById('confirm-replace');
+        const confirmPasswordHidden = document.getElementById('confirm-password-hidden');
+        const confirmPasswordInput = document.getElementById('confirm-password-input');
+        const confirmPasswordError = document.getElementById('confirm-password-error');
     const clearListButton = document.getElementById('clear-list-button');
     const inlineFeedback = document.getElementById('inline-feedback');
     const voterSkeleton = document.getElementById('voter-skeleton');
@@ -180,6 +189,8 @@ $(document).ready(function () {
             if (currentVoterCount > 0) {
                 pendingAction = 'replace';
                 confirmationMessage.textContent = 'Ya existe una lista cargada. ¿Deseas reemplazarla con la nueva?';
+                if (confirmPasswordInput) { confirmPasswordInput.value = ''; }
+                if (confirmPasswordError) { confirmPasswordError.style.display = 'none'; }
                 confirmationDialog.style.display = 'block';
             } else {
                 confirmReplaceInput.value = 'no';
@@ -188,17 +199,80 @@ $(document).ready(function () {
         });
         confirmActionButton.addEventListener('click', function() {
             if (pendingAction === 'replace') {
-                confirmReplaceInput.value = 'yes';
-                confirmationDialog.style.display = 'none';
-                uploadForm.submit();
+                const pwd = (confirmPasswordInput?.value || '').trim();
+                if (!pwd) {
+                    if (confirmPasswordError) {
+                        confirmPasswordError.textContent = 'Ingrese la contraseña.';
+                        confirmPasswordError.style.display = 'block';
+                    }
+                    return;
+                }
+                // Pre-validate password via lightweight endpoint; on success, submit form
+                $.ajax({
+                    url: "{% url 'voting:validate_password' %}",
+                    type: "POST",
+                    headers: { 'X-CSRFToken': getCSRFToken() },
+                    data: { confirm_password: pwd },
+                    success: function(resp){
+                        if (resp && resp.status === 'success') {
+                            if (confirmPasswordHidden) confirmPasswordHidden.value = pwd;
+                            confirmReplaceInput.value = 'yes';
+                            confirmationDialog.style.display = 'none';
+                            uploadForm.submit();
+                        } else {
+                            if (confirmPasswordError) {
+                                confirmPasswordError.textContent = (resp && resp.message) || 'Contraseña incorrecta.';
+                                confirmPasswordError.style.display = 'block';
+                            }
+                        }
+                    },
+                    error: function(){
+                        if (confirmPasswordError) {
+                            confirmPasswordError.textContent = 'No se pudo validar la contraseña. Intenta nuevamente.';
+                            confirmPasswordError.style.display = 'block';
+                        }
+                    }
+                });
             } else if (pendingAction === 'delete') {
-                confirmationDialog.style.display = 'none';
-                performDelete();
+                const pwd = (confirmPasswordInput?.value || '').trim();
+                if (!pwd) {
+                    if (confirmPasswordError) {
+                        confirmPasswordError.textContent = 'Ingrese la contraseña.';
+                        confirmPasswordError.style.display = 'block';
+                    }
+                    return;
+                }
+                // Pre-validate password just like replace, then execute delete
+                $.ajax({
+                    url: "{% url 'voting:validate_password' %}",
+                    type: "POST",
+                    headers: { 'X-CSRFToken': getCSRFToken() },
+                    data: { confirm_password: pwd },
+                    success: function(resp){
+                        if (resp && resp.status === 'success') {
+                            confirmationDialog.style.display = 'none';
+                            performDelete(pwd);
+                        } else {
+                            if (confirmPasswordError) {
+                                confirmPasswordError.textContent = (resp && resp.message) || 'Contraseña incorrecta.';
+                                confirmPasswordError.style.display = 'block';
+                            }
+                        }
+                    },
+                    error: function(){
+                        if (confirmPasswordError) {
+                            confirmPasswordError.textContent = 'No se pudo validar la contraseña. Intenta nuevamente.';
+                            confirmPasswordError.style.display = 'block';
+                        }
+                    }
+                });
             }
         });
         cancelActionButton.addEventListener('click', function() {
             pendingAction = null;
             confirmationDialog.style.display = 'none';
+            if (confirmPasswordInput) confirmPasswordInput.value = '';
+            if (confirmPasswordError) confirmPasswordError.style.display = 'none';
         });
 
         function getCSRFToken() {
@@ -545,14 +619,17 @@ $(document).ready(function () {
             $(".messages").remove();
             pendingAction = 'delete';
             confirmationMessage.textContent = '¿Seguro que deseas borrar toda la lista de votantes? Esta acción no se puede deshacer.';
+            if (confirmPasswordInput) confirmPasswordInput.value = '';
+            if (confirmPasswordError) confirmPasswordError.style.display = 'none';
             confirmationDialog.style.display = 'block';
         });
 
-        function performDelete() {
+        function performDelete(password) {
             $.ajax({
                 url: "{% url 'voting:clear_voters' %}",
                 type: "POST",
                 headers: { "X-CSRFToken": getCSRFToken() },
+                data: { confirm_password: password },
                 success: function(response) {
                     if (response.status === 'success') {
                         $("#voter-details").empty();
@@ -561,6 +638,7 @@ $(document).ready(function () {
                         updateVoterStats();
                         updateZoneStats();
                     } else {
+                        // If any unexpected server error occurs (other than password), show a single inline toast
                         showInlineFeedback(response.message || 'No se pudo borrar la lista', 'error');
                     }
                 },
