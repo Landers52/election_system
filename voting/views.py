@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden, JsonResponse
-import pandas as pd
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.db import transaction
@@ -41,6 +40,8 @@ def main_dashboard(request):
 
         # Step 2: Read DataFrame
         try:
+            # Lazy import pandas to avoid hard dependency at startup
+            import pandas as pd  # type: ignore
             df = pd.read_excel(uploaded_file, engine='openpyxl')
         except pd.errors.EmptyDataError:
             messages.error(request, "El archivo de Excel subido está vacío.")
@@ -438,6 +439,8 @@ def upload_voters_to_zone(request):
         return JsonResponse({"status": "error", "message": "Formato inválido, use .xlsx"}, status=400)
 
     try:
+        # Lazy import pandas to avoid hard dependency at startup
+        import pandas as pd  # type: ignore
         df = pd.read_excel(uploaded_file, engine='openpyxl')
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Error leyendo Excel: {str(e)}"})
